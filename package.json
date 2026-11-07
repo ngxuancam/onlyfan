@@ -1,0 +1,32 @@
+{
+  "name": "onlyfan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OnlyFan — a real-time 3D wind simulator: a stand fan, a GPU-rendered stable-fluids solver, streamlines and pressure heat maps around a car, a house and a tree.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
+    "@vercel/speed-insights": "^1.2.0",
+    "next": "16.4.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "three": "^0.187.0",
+    "zustand": "^5.0.16"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/three": "^0.187.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.3",
+    "typescript": "^5"
+  },
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,25 @@
+export const site = {
+  url: new URL("https://onlyfan.nguyenxuancam.com"),
+  name: "OnlyFan",
+  title: "OnlyFan — real-time 3D wind simulator",
+  tagline: "A stand fan, a live 3D fluid solver, and the air around a car, a house and a tree.",
+  description:
+    "Interactive 3D wind lab in the browser: an oscillating stand fan drives a real stable-fluids solver. Watch streamlines, particles and pressure heat maps flow around a car, through the windows of a house, and over trees and shrubs — while paper tags swing in the local wind.",
+  author: { name: "Nguyen Xuan Cam", url: "https://nguyenxuancam.com" },
+  repo: "https://github.com/ngxuancam/onlyfan",
+  keywords: [
+    "wind simulator",
+    "CFD",
+    "computational fluid dynamics",
+    "stable fluids",
+    "streamlines",
+    "airflow visualization",
+    "cross ventilation",
+    "wind effects architecture",
+    "pressure heat map",
+    "WebGL",
+    "three.js",
+    "React Three Fiber",
+    "stand fan",
+  ],
+};
