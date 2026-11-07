@@ -144,7 +144,7 @@ function Walls() {
   const bw = HALL.x1 - HALL.x0;
   const sw = HALL.z1 - HALL.z0;
   return (
-    <group>
+    <group userData={{ noShadow: true }}>
       <mesh position={[cx, HALL.h / 2, HALL.z0]}>
         <planeGeometry args={[bw, HALL.h]} />
         <meshStandardMaterial map={back} roughness={0.85} metalness={0.05} />
@@ -178,7 +178,7 @@ function Ceiling() {
   const strips = [-6.75, -2.25, 2.25, 6.75];
   const beams = [-8, -2, 4, 10, 16];
   return (
-    <group>
+    <group userData={{ noShadow: true }}>
       {strips.map((z) => (
         <group key={z} position={[5, 7.4, z]}>
           <mesh>

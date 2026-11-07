@@ -115,9 +115,10 @@ export function Fan() {
     const dt = Math.min(delta, 1 / 20);
     const s = sim.current;
     const f = useLab.getState().fan;
-    const powered = f.speed > 0.001;
+    const spd = f.enabled ? f.speed : 0;
+    const powered = spd > 0.001;
     // motor inertia
-    s.omega += (f.speed * MAX_OMEGA - s.omega) * Math.min(1, dt * 1.4);
+    s.omega += (spd * MAX_OMEGA - s.omega) * Math.min(1, dt * 1.4);
     s.spin += s.omega * dt;
     // oscillation: real fans sweep at ~6–8 s per cycle, only while running
     // with oscillation off the head eases back to the set direction, so Direction = where it blows
@@ -150,8 +151,8 @@ export function Fan() {
   const lowerTop = Math.min(1.1, H - 0.3);
 
   return (
-    <group position={[fan.x, 0, fan.z]} rotation-y={yaw}>
-      <group {...drag}>
+    <group position={[fan.x, 0, fan.z]} rotation-y={yaw} visible={fan.enabled}>
+      <group {...(fan.enabled ? drag : {})}>
         {/* base */}
         <mesh geometry={geo.base}>
           <meshPhysicalMaterial color="#3b3d42" roughness={0.45} metalness={0.1} clearcoat={0.6} clearcoatRoughness={0.3} />

@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { DOMAIN, DOMAIN_SIZE, FAN_RADIUS, VMAX, type Vec3 } from "@/sim/config";
-import { field, sampleVel, solidAt } from "@/sim/field";
+import { field, sampleVel } from "@/sim/field";
+import { solidExact } from "@/sim/collide";
 import type { LineSpec } from "@/sim/protocol";
 import { PALETTE_GLSL } from "@/lib/palette";
 import { useLab } from "@/lib/store";
@@ -172,6 +173,8 @@ void main() {
 `;
 const sFragment = /* glsl */ `
 uniform float uOpacity;
+uniform vec3 uLo;
+uniform vec3 uHi;
 varying float vAge;
 varying float vSeed;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -192,7 +195,7 @@ void main() {
   // dense at the nozzle, thinning out as the smoke mixes into the room
   float life = smoothstep(0.0, 0.05, vAge) * (1.0 - smoothstep(1.5, 5.0, vAge));
   float dens = uOpacity * soft * life / (1.0 + vAge * 1.3);
-  vec3 col = mix(vec3(0.6, 0.65, 0.72), vec3(0.98, 0.98, 0.96), smoothstep(-0.2, 0.6, n - d.y));
+  vec3 col = mix(uLo, uHi, smoothstep(-0.2, 0.6, n - d.y));
   gl_FragColor = vec4(col, clamp(dens, 0.0, 1.0));
   #include <colorspace_fragment>
 }
@@ -208,7 +211,8 @@ function rakeNozzles(): [number, number][] {
 }
 
 export function Smoke({ count }: { count: number }) {
-  const visible = useLab((s) => s.layers.smoke);
+  const visible = useLab((s) => s.layers.smoke || s.objects.smoker.enabled);
+  const studio = useLab((s) => s.theme === "studio");
   const nozzles = useMemo(() => rakeNozzles(), []);
   const { geometry, material, state } = useMemo(() => {
     const g = new THREE.BufferGeometry();
@@ -221,7 +225,7 @@ export function Smoke({ count }: { count: number }) {
     const m = new THREE.ShaderMaterial({
       vertexShader: sVertex,
       fragmentShader: sFragment,
-      uniforms: { uSize: { value: 380 }, uOpacity: { value: 0.3 } },
+      uniforms: { uSize: { value: 380 }, uOpacity: { value: 0.3 }, uLo: { value: new THREE.Color(0.6, 0.65, 0.72) }, uHi: { value: new THREE.Color(0.98, 0.98, 0.96) } },
       transparent: true,
       depthWrite: false,
     });
@@ -231,31 +235,45 @@ export function Smoke({ count }: { count: number }) {
   const tmp = useMemo(() => ({ v: [0, 0, 0] as Vec3, e1: new THREE.Vector3(), e2: new THREE.Vector3(), d: new THREE.Vector3() }), []);
 
   useFrame((_, delta) => {
-    if (!visible || !field.vel || useLab.getState().view === "2d") return;
+    if (!field.vel || useLab.getState().view === "2d") return;
     const dt = Math.min(delta, 1 / 30);
     const pos = geometry.attributes.position.array as Float32Array;
     const age = geometry.attributes.aAge.array as Float32Array;
     const fan = field.fan;
 
-    // emit: a fixed puff rate, so the whole buffer cycles in about 5 s
-    if (fan.U > 0.2) {
+    // emit: a fixed total puff rate (the buffer cycles in about 5 s), shared between the
+    // rake in front of the stand fan and the smoke machine nozzle
+    const st = useLab.getState();
+    const rakeOn = st.layers.smoke && fan.U > 0.2;
+    const sm = field.smoker;
+    const wRake = rakeOn ? 1 : 0;
+    const wSmoke = sm.on ? 0.3 + sm.rate * 1.2 : 0;
+    const wSum = wRake + wSmoke;
+    if (wSum > 0 && !st.paused) {
       tmp.d.set(...fan.d);
       tmp.e1.set(0, 1, 0).cross(tmp.d).normalize();
       tmp.e2.crossVectors(tmp.d, tmp.e1);
-      state.carry += (count / 5.2) * dt;
+      state.carry += (count / 5.2) * dt * Math.min(1, wSum);
       let n = Math.floor(state.carry);
       state.carry -= n;
       const R = FAN_RADIUS;
       while (n-- > 0) {
         const i = state.cursor;
         state.cursor = (state.cursor + 1) % count;
-        const [a, b] = nozzles[(Math.random() * nozzles.length) | 0];
-        const ja = a * R + (Math.random() - 0.5) * 0.03;
-        const jb = b * R + (Math.random() - 0.5) * 0.03;
-        const fw = 0.12 + Math.random() * 0.06;
-        pos[i * 3] = fan.c[0] + tmp.d.x * fw + tmp.e1.x * ja + tmp.e2.x * jb;
-        pos[i * 3 + 1] = fan.c[1] + tmp.d.y * fw + tmp.e1.y * ja + tmp.e2.y * jb;
-        pos[i * 3 + 2] = fan.c[2] + tmp.d.z * fw + tmp.e1.z * ja + tmp.e2.z * jb;
+        if (Math.random() * wSum < wRake) {
+          const [a, b] = nozzles[(Math.random() * nozzles.length) | 0];
+          const ja = a * R + (Math.random() - 0.5) * 0.03;
+          const jb = b * R + (Math.random() - 0.5) * 0.03;
+          const fw = 0.12 + Math.random() * 0.06;
+          pos[i * 3] = fan.c[0] + tmp.d.x * fw + tmp.e1.x * ja + tmp.e2.x * jb;
+          pos[i * 3 + 1] = fan.c[1] + tmp.d.y * fw + tmp.e1.y * ja + tmp.e2.y * jb;
+          pos[i * 3 + 2] = fan.c[2] + tmp.d.z * fw + tmp.e1.z * ja + tmp.e2.z * jb;
+        } else {
+          const f = 0.04 + Math.random() * 0.12;
+          pos[i * 3] = sm.c[0] + sm.d[0] * f + (Math.random() - 0.5) * 0.05;
+          pos[i * 3 + 1] = sm.c[1] + (Math.random() - 0.5) * 0.05;
+          pos[i * 3 + 2] = sm.c[2] + sm.d[2] * f + (Math.random() - 0.5) * 0.05;
+        }
         age[i] = Math.random() * dt;
       }
     }
@@ -272,19 +290,25 @@ export function Smoke({ count }: { count: number }) {
       let nx = x + tmp.v[0] * dt + (Math.random() - 0.5) * k;
       let ny = y + tmp.v[1] * dt + (Math.random() - 0.5) * k * 0.8;
       let nz = z + tmp.v[2] * dt + (Math.random() - 0.5) * k;
-      if (solidAt(nx, ny, nz)) {
-        // slide along the surface: keep only the displacement components that stay in the air
-        if (!solidAt(nx, y, z)) {
+      if (ny < 0.03) ny = 0.03;
+      if (solidExact(nx, ny, nz)) {
+        // hit a body: slide along its surface, keeping the largest part of the step that
+        // stays in the air; failing that, lift off the surface a little
+        if (!solidExact(nx, ny, z)) nz = z;
+        else if (!solidExact(nx, y, nz)) ny = y;
+        else if (!solidExact(x, ny, nz)) nx = x;
+        else if (!solidExact(x, ny, z)) {
+          nx = x;
+          nz = z;
+        } else if (!solidExact(nx, y, z)) {
           ny = y;
           nz = z;
-        } else if (!solidAt(x, ny, nz)) nx = x;
-        else if (!solidAt(x, y + 0.04, z)) {
+        } else if (!solidExact(x, y + 0.05, z)) {
           nx = x;
-          ny = y + 0.04;
+          ny = y + 0.05;
           nz = z;
         } else age[i] = 99;
       }
-      if (ny < 0.03) ny = 0.03;
       pos[i * 3] = nx;
       pos[i * 3 + 1] = ny;
       pos[i * 3 + 2] = nz;
@@ -294,6 +318,13 @@ export function Smoke({ count }: { count: number }) {
     geometry.attributes.position.needsUpdate = true;
     geometry.attributes.aAge.needsUpdate = true;
   });
+
+  // on the light studio backdrop the smoke needs more body and a cooler shade to read
+  useEffect(() => {
+    material.uniforms.uLo.value.setRGB(0.56, 0.6, 0.67);
+    material.uniforms.uHi.value.setRGB(0.98, 0.98, 0.97);
+    material.uniforms.uOpacity.value = studio ? 0.34 : 0.3;
+  }, [material, studio]);
 
   return <points geometry={geometry} material={material} visible={visible} frustumCulled={false} renderOrder={6} />;
 }
@@ -315,6 +346,8 @@ uniform vec3 uMin;
 uniform vec3 uSize;
 uniform float uCell;
 uniform float uGround;
+uniform float uStudio;
+uniform vec3 uBg;
 varying vec3 vWorld;
 ${PALETTE_GLSL}
 float gridLine(vec2 p, float step, float w) {
@@ -371,6 +404,27 @@ void main() {
   // ceiling light strips reflected on the epoxy (fake, cheap)
   float refl = (1.0 - smoothstep(0.0, 0.9, abs(fract((vWorld.z + 9.0) / 4.5) - 0.5) * 4.5)) * 0.05;
   col += vec3(0.8, 0.88, 1.0) * refl * (1.0 - inside * 0.5);
+  // test hall: beyond its walls there is only the dark backdrop
+  vec2 hallD = max(vec2(-11.0, -9.5) - vWorld.xz, vWorld.xz - vec2(21.0, 9.5));
+  col = mix(col, uBg, step(0.0, max(hallD.x, hallD.y)));
+
+  // studio: dark polished concrete with the softboxes mirrored in it, melting into the cyclorama
+  vec3 scol = vec3(0.055, 0.059, 0.066) * (0.86 + 0.22 * mott);
+  float sMinor = gridLine(vWorld.xz, 1.0, 1.0);
+  float sMajor = gridLine(vWorld.xz, 5.0, 1.6);
+  scol += vec3(0.55, 0.62, 0.72) * (sMinor * 0.018 + sMajor * 0.035) * inside;
+  // softbox reflections: two long soft stripes, brighter towards the viewer (fresnel-ish)
+  float sb = exp(-pow((vWorld.z + 2.6) / 0.9, 2.0)) + exp(-pow((vWorld.z - 2.6) / 0.9, 2.0));
+  sb *= smoothstep(-6.0, -3.0, vWorld.x) * (1.0 - smoothstep(11.0, 14.0, vWorld.x));
+  scol += vec3(0.75, 0.8, 0.9) * sb * (0.05 + 0.05 * mott);
+  float edgeLine = 1.0 - smoothstep(0.0, fwidth(dOut) * 1.5, abs(dOut));
+  float dash = step(0.45, fract((vWorld.x + vWorld.z) * 1.2));
+  scol = mix(scol, vec3(0.55, 0.6, 0.66), edgeLine * dash * 0.45);
+  scol = mix(scol, mix(scol * 0.55, hm, 0.8), uGround * inside * (0.25 + 0.75 * amt));
+  scol *= 1.0 - 0.32 * f.a * inside;
+  float dist = length(vWorld.xz - vec2(5.0, 0.0));
+  scol = mix(scol, uBg, smoothstep(16.0, 48.0, dist));
+  col = mix(col, scol, uStudio);
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }
@@ -383,20 +437,27 @@ export function Ground() {
       new THREE.ShaderMaterial({
         vertexShader: gVertex,
         fragmentShader: gFragment,
-        uniforms: { ...sharedUniforms, uGround: { value: 1 } },
+        uniforms: { ...sharedUniforms, uGround: { value: 1 }, uStudio: { value: 1 }, uBg: { value: new THREE.Color(STUDIO_BG) } },
       }),
     [],
   );
   useFrame((_, dt) => {
     const u = material.uniforms.uGround;
     u.value += ((groundHeat ? 1 : 0) - u.value) * Math.min(1, dt * 6);
+    const studio = useLab.getState().theme === "studio";
+    const us = material.uniforms.uStudio;
+    us.value += ((studio ? 1 : 0) - us.value) * Math.min(1, dt * 5);
+    (material.uniforms.uBg.value as THREE.Color).set(studio ? STUDIO_BG : HALL_BG);
   });
   return (
     <mesh rotation-x={-Math.PI / 2} position={[5, 0, 0]} material={material} renderOrder={-1}>
-      <planeGeometry args={[32, 19]} />
+      <planeGeometry args={[140, 140]} />
     </mesh>
   );
 }
+
+export const STUDIO_BG = "#202329";
+export const HALL_BG = "#0b0d11";
 
 /** Faint wireframe of the simulated volume. */
 export function DomainBox() {

@@ -27,6 +27,10 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     post({ type: "ready", grid, line });
     return;
   }
+  if (msg.type === "reset" && fluid) {
+    fluid.clear();
+    return;
+  }
   if (msg.type === "step" && fluid) {
     const t0 = performance.now();
     if (msg.objects) fluid.setObstacles(msg.objects);

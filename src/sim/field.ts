@@ -22,6 +22,10 @@ export const field = {
   lines: null as null | { pos: Float32Array; spd: Float32Array; tof: Float32Array; len: Uint16Array },
   linesVersion: 0,
   /** fan state as rendered this frame (world) */
+  /** extra momentum discs published by source components (blower, smoke machine), world */
+  discs: {} as Record<string, { c: Vec3; d: Vec3; R: number; U: number; on: boolean }>,
+  /** smoke machine nozzle, world: emits puffs when on */
+  smoker: { c: [0, 0.6, 0] as Vec3, d: [1, 0, 0] as Vec3, rate: 0, on: false },
   /** exhaust (suction) fan disc, world */
   exhaust: { c: [0, 1, 0] as Vec3, d: [1, 0, 0] as Vec3, U: 0, on: false },
   fan: { c: [0, 2, 0] as Vec3, d: [1, 0, 0] as Vec3, U: 0, spin: 0, /** current head direction, degrees (base + oscillation) */ headYaw: 0 },

@@ -11,6 +11,7 @@ export interface LineSpec {
 
 export type ToWorker =
   | { type: "init"; quality: Quality }
+  | { type: "reset" }
   | {
       type: "step";
       dt: number;

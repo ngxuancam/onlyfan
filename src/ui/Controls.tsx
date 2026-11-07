@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { field } from "@/sim/field";
-import { OBJ_LABEL, PRESETS, useLab, type ObjKey, type PresetId } from "@/lib/store";
+import { useLab } from "@/lib/store";
 import { PALETTE_CSS } from "@/lib/palette";
 import { PMAX, VMAX } from "@/sim/config";
 
-/* -------------------------------------------------------------- atoms */
+/* --------------------------------------------------------------- atoms */
 
-function Slider({
+export function Slider({
   label,
   value,
   min,
@@ -30,14 +30,8 @@ function Slider({
 }) {
   const pct = ((value - min) / (max - min)) * 100;
   return (
-    <label className={`slider ${disabled ? "is-disabled" : ""}`}>
-      <span className="slider-head">
-        <span>{label}</span>
-        <output>
-          {format ? format(value) : value}
-          {unit && <small>{unit}</small>}
-        </output>
-      </span>
+    <label className={`field slider ${disabled ? "is-disabled" : ""}`}>
+      <span className="field-label">{label}</span>
       <input
         type="range"
         min={min}
@@ -48,46 +42,63 @@ function Slider({
         style={{ "--pct": `${pct}%` } as React.CSSProperties}
         onChange={(e) => onChange(Number(e.target.value))}
       />
+      <output>
+        {format ? format(value) : value}
+        {unit && <small>{unit}</small>}
+      </output>
     </label>
   );
 }
 
-function Toggle({ label, checked, onChange, hint }: { label: string; checked: boolean; onChange: (v: boolean) => void; hint?: string }) {
+/** Yes / No pill pair, as in a 3D editor's inspector. */
+export function YesNo({ label, value, onChange, yes = "Yes", no = "No" }: { label: string; value: boolean; onChange: (v: boolean) => void; yes?: string; no?: string }) {
   return (
-    <label className="toggle" title={hint}>
-      <span>{label}</span>
-      <input type="checkbox" role="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <i aria-hidden />
-    </label>
+    <div className="field">
+      <span className="field-label">{label}</span>
+      <div className="pills" role="radiogroup" aria-label={label}>
+        <button type="button" role="radio" aria-checked={value} className={value ? "on" : ""} onClick={() => onChange(true)}>
+          {yes}
+        </button>
+        <button type="button" role="radio" aria-checked={!value} className={!value ? "on" : ""} onClick={() => onChange(false)}>
+          {no}
+        </button>
+      </div>
+    </div>
   );
 }
 
-function Section({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
+export function Choice<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
-    <section className="section">
+    <div className="field">
+      <span className="field-label">{label}</span>
+      <div className="pills" role="radiogroup" aria-label={label}>
+        {options.map(([v, l]) => (
+          <button key={v} type="button" role="radio" aria-checked={value === v} className={value === v ? "on" : ""} onClick={() => onChange(v)}>
+            {l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function Group({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
+  return (
+    <section className="group">
       <header>
-        <h2>{title}</h2>
+        <h3>{title}</h3>
         {aside}
       </header>
-      {children}
+      <div className="group-body">{children}</div>
     </section>
   );
 }
-
-/* ----------------------------------------------------------- sections */
-
-const SPEED_STEPS: [number, string][] = [
-  [0, "Off"],
-  [0.45, "1"],
-  [0.7, "2"],
-  [1, "3"],
-];
 
 /**
  * Blowing direction, live: the thumb follows the oscillating head; the shaded band is the
  * sweep range. Dragging sets the centre of the sweep (the fan's base direction).
  */
-function DirectionSlider() {
+export function DirectionSlider() {
   const fan = useLab((s) => s.fan);
   const setFan = useLab((s) => s.setFan);
   const [live, setLive] = useState(fan.yaw);
@@ -109,17 +120,11 @@ function DirectionSlider() {
   const wrap = (v: number) => ((((v + 180) % 360) + 360) % 360) - 180;
   const pct = (v: number) => ((Math.max(-180, Math.min(180, v)) + 180) / 360) * 100;
   const half = fan.oscillate ? fan.sweep / 2 : 0;
-  const band = `linear-gradient(90deg, rgba(255,255,255,.12) ${pct(fan.yaw - half)}%, rgba(255,106,26,.45) ${pct(fan.yaw - half)}%, rgba(255,106,26,.45) ${pct(fan.yaw + half)}%, rgba(255,255,255,.12) ${pct(fan.yaw + half)}%)`;
+  const band = `linear-gradient(90deg, rgba(255,255,255,.1) ${pct(fan.yaw - half)}%, rgba(47,128,255,.55) ${pct(fan.yaw - half)}%, rgba(47,128,255,.55) ${pct(fan.yaw + half)}%, rgba(255,255,255,.1) ${pct(fan.yaw + half)}%)`;
   return (
-    <label className="slider">
-      <span className="slider-head">
-        <span>
-          Direction {fan.oscillate && fan.speed > 0 && <em className="live">live</em>}
-        </span>
-        <output>
-          {wrap(shown)}
-          <small>°</small>
-        </output>
+    <label className="field slider">
+      <span className="field-label">
+        Direction {fan.oscillate && fan.speed > 0 && <em className="live">live</em>}
       </span>
       <input
         type="range"
@@ -137,171 +142,24 @@ function DirectionSlider() {
           setLive(Number(e.target.value));
         }}
       />
+      <output>
+        {wrap(shown)}
+        <small>°</small>
+      </output>
     </label>
   );
 }
 
-function FanSection() {
-  const fan = useLab((s) => s.fan);
-  const setFan = useLab((s) => s.setFan);
-  return (
-    <Section title="Fan" aside={<span className="chip-mono">{(fan.speed * 7.5).toFixed(1)} m/s exit</span>}>
-      <div className="speed-row" role="radiogroup" aria-label="Fan speed preset">
-        {SPEED_STEPS.map(([v, l]) => (
-          <button
-            key={l}
-            type="button"
-            role="radio"
-            aria-checked={Math.abs(fan.speed - v) < 0.02}
-            className={`speed-btn ${Math.abs(fan.speed - v) < 0.02 ? "on" : ""}`}
-            onClick={() => setFan({ speed: v })}
-          >
-            {l}
-          </button>
-        ))}
-      </div>
-      <Slider label="Speed" value={Math.round(fan.speed * 100)} min={0} max={100} unit="%" onChange={(v) => setFan({ speed: v / 100 })} />
-      <Toggle label="Oscillate" checked={fan.oscillate} onChange={(v) => setFan({ oscillate: v })} />
-      <Slider label="Sweep angle" value={fan.sweep} min={10} max={120} unit="°" onChange={(v) => setFan({ sweep: v })} disabled={!fan.oscillate} />
-      <DirectionSlider />
-      <Slider label="Head tilt" value={fan.tilt} min={-20} max={30} unit="°" onChange={(v) => setFan({ tilt: v })} />
-      <Slider label="Height" value={fan.height} min={1.2} max={2.6} step={0.05} unit=" m" format={(v) => v.toFixed(2)} onChange={(v) => setFan({ height: v })} />
-    </Section>
-  );
-}
-
-const OBJ_KEYS: ObjKey[] = ["car", "house", "tree", "shrub", "rig", "exhaust"];
-
-function SuctionSlider() {
-  const suction = useLab((s) => s.fan.suction);
-  const setFan = useLab((s) => s.setFan);
-  return <Slider label="Suction" value={Math.round(suction * 100)} min={0} max={100} unit="%" onChange={(v) => setFan({ suction: v / 100 })} />;
-}
-
-function ObjectsSection() {
-  const objects = useLab((s) => s.objects);
-  const selected = useLab((s) => s.selected);
-  const setObj = useLab((s) => s.setObj);
-  const select = useLab((s) => s.select);
-  const sel = selected && selected !== "fan" ? selected : null;
-  return (
-    <Section title="Obstacles" aside={<span className="hint">drag in the scene</span>}>
-      <div className="chips">
-        {OBJ_KEYS.map((k) => {
-          const o = objects[k];
-          return (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={o.enabled}
-              className={`chip ${o.enabled ? "on" : ""} ${sel === k ? "sel" : ""}`}
-              onClick={() => {
-                if (!o.enabled) {
-                  setObj(k, { enabled: true });
-                  select(k);
-                } else if (sel === k) {
-                  setObj(k, { enabled: false });
-                  select(null);
-                } else select(k);
-              }}
-            >
-              <span className="dot" />
-              {OBJ_LABEL[k]}
-            </button>
-          );
-        })}
-      </div>
-      {sel && objects[sel].enabled ? (
-        <div className="selected">
-          <div className="selected-head">
-            <strong>{OBJ_LABEL[sel]}</strong>
-            <span className="chip-mono">
-              x {objects[sel].x.toFixed(1)} · z {objects[sel].z.toFixed(1)}
-            </span>
-            <button type="button" className="link" onClick={() => (setObj(sel, { enabled: false }), select(null))}>
-              Remove
-            </button>
-          </div>
-          <Slider label="Rotation" value={objects[sel].yaw} min={-180} max={180} unit="°" onChange={(v) => setObj(sel, { yaw: v })} />
-          {sel === "exhaust" && <SuctionSlider />}
-        </div>
-      ) : (
-        <p className="hint block">Tap a chip to add or select. Tap a selected chip again to remove it.</p>
-      )}
-    </Section>
-  );
-}
-
-function LayersSection() {
-  const layers = useLab((s) => s.layers);
-  const set = useLab((s) => s.setLayers);
-  return (
-    <Section title="Layers">
-      <Toggle label="Smoke gun" checked={layers.smoke} onChange={(v) => set({ smoke: v })} />
-      <Toggle label="Streamlines (speed colour)" checked={layers.streamlines} onChange={(v) => set({ streamlines: v })} />
-      <Toggle label="Wind load on objects" checked={layers.surfaceHeat} onChange={(v) => set({ surfaceHeat: v })} />
-      <Toggle label="Ground wind-speed map" checked={layers.groundHeat} onChange={(v) => set({ groundHeat: v })} />
-      <Toggle label="X-ray walls & roof" checked={layers.xray} onChange={(v) => set({ xray: v })} />
-    </Section>
-  );
-}
-
-function PresetsSection() {
-  const apply = useLab((s) => s.applyPreset);
-  const [active, setActive] = useState<PresetId>("playground");
-  return (
-    <Section title="Scenarios">
-      <div className="presets">
-        {(Object.keys(PRESETS) as PresetId[]).map((id) => (
-          <button
-            key={id}
-            type="button"
-            className={`preset ${active === id ? "on" : ""}`}
-            onClick={() => {
-              apply(id);
-              setActive(id);
-            }}
-          >
-            {PRESETS[id].label}
-          </button>
-        ))}
-      </div>
-      <p className="hint block">{PRESETS[active].hint}</p>
-    </Section>
-  );
-}
-
-/* --------------------------------------------------------------- panel */
-
-export function ControlPanel() {
-  const [open, setOpen] = useState(true);
-  return (
-    <aside className={`panel glass ${open ? "is-open" : ""}`} aria-label="Simulation controls">
-      <button type="button" className="panel-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span>{open ? "Hide controls" : "Controls"}</span>
-        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-          <path d={open ? "M3 9l4-4 4 4" : "M3 5l4 4 4-4"} stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-        </svg>
-      </button>
-      <div className="panel-body">
-        <PresetsSection />
-        <FanSection />
-        <ObjectsSection />
-        <LayersSection />
-      </div>
-    </aside>
-  );
-}
+/* -------------------------------------------------------------- legend */
 
 export function Legend() {
-  const st = useLab((s) => s.stats);
   const speedLayers = useLab((s) => s.layers.streamlines || s.layers.groundHeat);
+  const view = useLab((s) => s.view);
   // load map: t = 0.15 + (g - 0.5) * 2.4 with g = 0.5 + p / (2 PMAX); Pa with rho = 1.2 kg/m3
   const pa = (t: number) => (((t - 0.15) / 2.4) * 2 * PMAX * 1.2).toFixed(1);
-  const view = useLab((s) => s.view);
   if (view === "2d")
     return (
-      <div className="legend glass">
+      <div className="legend">
         <div className="legend-title">
           <span>In-plane wind speed</span>
           <small>m/s</small>
@@ -313,15 +171,15 @@ export function Legend() {
           <span>{VMAX.toFixed(0)}+</span>
         </div>
         <p className="legend-note">
-          <b style={{ color: "#ff6b6b" }}>D</b> drag along the oncoming wind · <b style={{ color: "#3ee08f" }}>S</b> side force across it — pressure integrated over each body.
+          <b style={{ color: "#ff6b6b" }}>D</b> drag along the oncoming wind · <b style={{ color: "#3ee08f" }}>S</b> side force across it.
         </p>
       </div>
     );
   return (
-    <div className="legend glass">
+    <div className="legend">
       <div className="legend-title">
         <span>Wind load on objects</span>
-        <small>surface pressure, Pa</small>
+        <small>Pa</small>
       </div>
       <div className="bar" style={{ background: PALETTE_CSS }} />
       <div className="ticks">
@@ -333,7 +191,7 @@ export function Legend() {
         <>
           <div className="legend-title sub">
             <span>Streamlines / ground</span>
-            <small>wind speed, m/s</small>
+            <small>m/s</small>
           </div>
           <div className="ticks">
             <span>0</span>
@@ -342,26 +200,6 @@ export function Legend() {
           </div>
         </>
       )}
-      <dl className="stats">
-        <div>
-          <dt>Render</dt>
-          <dd>{st.fps} fps</dd>
-        </div>
-        <div>
-          <dt>Solver</dt>
-          <dd>
-            {st.simHz} Hz · {st.stepMs.toFixed(1)} ms
-          </dd>
-        </div>
-        <div>
-          <dt>Grid</dt>
-          <dd>{st.grid || "…"}</dd>
-        </div>
-        <div>
-          <dt>Peak</dt>
-          <dd>{st.maxSpeed.toFixed(1)} m/s</dd>
-        </div>
-      </dl>
     </div>
   );
 }

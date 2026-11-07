@@ -1,12 +1,13 @@
 "use client";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { BOUND_RADIUS, SHAPES, type ObjKind, type Part, type Prim } from "@/sim/obstacles";
 import { DOMAIN } from "@/sim/config";
 import { useLab, type Selectable } from "@/lib/store";
-import { makeHeatMaterial } from "./heatMaterial";
+import { makeHeatMaterial, type PbrOpts } from "./heatMaterial";
+import { CarModel } from "./CarModel";
 import { TagStrips } from "./TagRig";
 
 /* ------------------------------------------------------------ geometry */
@@ -70,15 +71,16 @@ function primGeometry(p: Prim): THREE.BufferGeometry {
   return ng;
 }
 
-const PART_STYLE: Record<Part, { color: string; gloss: number; opacity?: number }> = {
-  body: { color: "#dfe3e8", gloss: 0.8 },
-  glass: { color: "#1b2330", gloss: 1.2 },
-  wheel: { color: "#16181c", gloss: 0.2 },
-  wall: { color: "#cdd2d8", gloss: 0.15 },
-  roof: { color: "#6f7886", gloss: 0.3, opacity: 0.999 },
-  floor: { color: "#2b3038", gloss: 0.05 },
-  trunk: { color: "#5a4535", gloss: 0.05 },
-  foliage: { color: "#4b8a5c", gloss: 0.1, opacity: 0.82 },
+/** PBR look per part; `heat` = how strongly the wind-load map tints it. */
+const PART_STYLE: Record<Part, { color: string } & PbrOpts> = {
+  body: { color: "#e9ecf0", roughness: 0.32, metalness: 0.35, clearcoat: 1 },
+  glass: { color: "#0c1016", roughness: 0.05, clearcoat: 1, heat: 0.45 },
+  wheel: { color: "#121314", roughness: 0.9, heat: 0.3 },
+  wall: { color: "#e4e1db", roughness: 0.88, heat: 0.8 },
+  roof: { color: "#3f444c", roughness: 0.62, metalness: 0.1, opacity: 0.999, heat: 0.8 },
+  floor: { color: "#8a7560", roughness: 0.55, heat: 0.2 },
+  trunk: { color: "#4a3a2e", roughness: 0.95, heat: 0.35 },
+  foliage: { color: "#203b24", roughness: 0.9, heat: 0.25 },
 };
 
 function useParts(kind: ObjKind) {
@@ -91,7 +93,7 @@ function useParts(kind: ObjKind) {
     }
     return [...byPart.entries()].map(([part, geos]) => {
       const st = PART_STYLE[part];
-      const mat = makeHeatMaterial(st.color, { gloss: st.gloss, opacity: st.opacity });
+      const mat = makeHeatMaterial(st.color, st);
       return { part, geometry: mergeGeometries(geos)!, material: mat };
     });
   }, [kind]);
@@ -168,7 +170,7 @@ function Obstacle({ kind }: { kind: ObjKind }) {
     for (const { part, material } of parts) {
       if (part !== "wall" && part !== "roof") continue;
       const op = xray ? (part === "roof" ? 0.12 : 0.32) : 1;
-      material.uniforms.uOpacity.value = op;
+      material.opacity = op;
       material.transparent = op < 1 || part === "roof";
       material.depthWrite = op >= 1;
       material.needsUpdate = true;
@@ -179,31 +181,79 @@ function Obstacle({ kind }: { kind: ObjKind }) {
   return (
     <group position={[o.x, 0, o.z]} rotation-y={(o.yaw * Math.PI) / 180}>
       <group {...drag}>
-        {parts.map(({ part, geometry, material }) => (
-          <mesh key={part} geometry={geometry} material={material} renderOrder={part === "roof" ? 2 : part === "foliage" ? 3 : 0} />
-        ))}
+        {kind === "car" ? (
+          <CarModel />
+        ) : (
+          parts.map(({ part, geometry, material }) =>
+            part === "foliage" ? (
+              // dense dark core; the leaf cards on its surface carry the look
+              <mesh key={part} geometry={geometry} material={material} scale={0.9} castShadow receiveShadow />
+            ) : (
+              <mesh key={part} geometry={geometry} material={material} renderOrder={part === "roof" ? 2 : 0} castShadow receiveShadow />
+            ),
+          )
+        )}
+        {(kind === "tree" || kind === "shrub") && <Foliage kind={kind} />}
       </group>
-      {kind === "car" && <CarDetails />}
       {kind === "house" && <TagStrips id="house-rig" from={[-0.95, 2.25, -1.45]} to={[-0.95, 2.25, 1.45]} count={7} length={0.55} />}
       <SelectionRing radius={BOUND_RADIUS[kind] * 0.95} active={selected} />
     </group>
   );
 }
 
-function CarDetails() {
-  // light bars front and rear: purely cosmetic
-  return (
-    <group>
-      <mesh position={[-1.985, 0.79, 0]}>
-        <boxGeometry args={[0.02, 0.04, 1.4]} />
-        <meshBasicMaterial color="#e9f4ff" toneMapped={false} />
-      </mesh>
-      <mesh position={[1.985, 0.86, 0]}>
-        <boxGeometry args={[0.02, 0.05, 1.5]} />
-        <meshBasicMaterial color="#ff2d3a" toneMapped={false} />
-      </mesh>
-    </group>
-  );
+/**
+ * Leaf cards scattered over the canopy ellipsoids: thousands of small instanced leaves
+ * instead of a smooth blob, tinted in a few greens and gently swaying with the wind.
+ */
+function Foliage({ kind }: { kind: "tree" | "shrub" }) {
+  const { geo, mat, mats, n } = useMemo(() => {
+    const s = new THREE.Shape();
+    s.moveTo(0, -0.5);
+    s.quadraticCurveTo(0.42, -0.05, 0, 0.5);
+    s.quadraticCurveTo(-0.42, -0.05, 0, -0.5);
+    const geo = new THREE.ShapeGeometry(s, 4);
+    const mat = makeHeatMaterial("#ffffff", { roughness: 0.75, heat: 0.12 });
+    const ells = SHAPES[kind].filter((p) => p.t === "ell");
+    const per = kind === "tree" ? 1100 : 520;
+    const mats: THREE.Matrix4[] = [];
+    const cols: THREE.Color[] = [];
+    const greens = ["#2f5d2a", "#3d7334", "#4f8a3c", "#6a9a45", "#2a4d2b", "#7aa04e"];
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const v = new THREE.Vector3();
+    const sc = new THREE.Vector3();
+    for (const p of ells) {
+      if (p.t !== "ell") continue;
+      const count = Math.round(per * ((p.r[0] * p.r[2]) / 2.4));
+      for (let i = 0; i < count; i++) {
+        // random direction, pushed to 82-102 % of the shell so the canopy has depth
+        v.set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
+        const r = 0.82 + Math.random() * 0.2;
+        v.set(p.c[0] + v.x * p.r[0] * r, p.c[1] + v.y * p.r[1] * r, p.c[2] + v.z * p.r[2] * r);
+        e.set(Math.random() * Math.PI, Math.random() * Math.PI * 2, Math.random() * Math.PI);
+        q.setFromEuler(e);
+        const size = (kind === "tree" ? 0.17 : 0.12) * (0.75 + Math.random() * 0.5);
+        sc.set(size * 0.7, size, size);
+        m.compose(v, q, sc);
+        mats.push(m.clone());
+        cols.push(new THREE.Color(greens[(Math.random() * greens.length) | 0]).offsetHSL(0, 0, (Math.random() - 0.5) * 0.06));
+      }
+    }
+    return { geo, mat, mats: { mats, cols }, n: mats.length };
+  }, [kind]);
+  const ref = useRef<THREE.InstancedMesh>(null);
+  useEffect(() => {
+    const im = ref.current;
+    if (!im) return;
+    mats.mats.forEach((m, i) => {
+      im.setMatrixAt(i, m);
+      im.setColorAt(i, mats.cols[i]);
+    });
+    im.instanceMatrix.needsUpdate = true;
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  }, [mats]);
+  return <instancedMesh ref={ref} args={[geo, mat, n]} castShadow receiveShadow />;
 }
 
 export function Obstacles() {

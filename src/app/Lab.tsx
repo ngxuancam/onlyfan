@@ -1,7 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { ControlPanel, Legend } from "@/ui/Controls";
-import { Toolbar } from "@/ui/Toolbar";
+import { Inspector, LegendDock, Outliner, Toolbar, ViewBar } from "@/ui/Editor";
 import { FlowMap2D } from "@/ui/FlowMap2D";
 import { useLab } from "@/lib/store";
 
@@ -13,16 +12,19 @@ const Stage = dynamic(() => import("./Stage"), {
 
 export function Lab() {
   const view = useLab((s) => s.view);
+  const theme = useLab((s) => s.theme);
   return (
-    <>
-      {/* the 3D stage keeps running in 2D mode: it owns the fan and feeds the solver */}
+    <div className={`editor theme-${theme}`}>
+      {/* the 3D stage keeps running in 2D mode: it owns the fans and feeds the solver */}
       <div className={`stage ${view === "2d" ? "is-hidden" : ""}`}>
         <Stage />
       </div>
       <FlowMap2D />
+      <Outliner />
+      <Inspector />
       <Toolbar />
-      <ControlPanel />
-      <Legend />
-    </>
+      <ViewBar />
+      <LegendDock />
+    </div>
   );
 }

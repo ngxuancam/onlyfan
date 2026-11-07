@@ -14,24 +14,42 @@ from that one velocity / pressure field.
 
 ## What you can do
 
-- **Fan**: speed (off, 1, 2, 3, or a slider), **swing** (oscillation) on or off, sweep angle, direction
-  (the slider follows the swinging head live), head tilt and height. Drag the fan to move it.
-- **Exhaust fan**: a boxed extractor you can put behind the car. With the blower in front it pulls the
-  air off the tail, wind-tunnel style, as if the car were driving.
-- **Obstacles**: car, house (walls with windows, a door, an interior partition and a gable roof),
-  tree and shrub (porous foliage that bleeds speed instead of blocking it), and a paper-tag rig. Drag
-  them in the scene or rotate them from the panel.
-- **Scenarios**: playground, wind tunnel, cross ventilation, tree & shrub shelter.
-- **Layers**
-  - *Smoke gun*: puffs from a nozzle rake in front of the guard, advected through the field (true
-    streaklines) and spreading as they age.
-  - *Wind load on objects*: the static pressure of the air touching each surface. Red is where the
-    wind hits, blue is suction (lee side, roof). Surface flow streaks run along the near-wall velocity.
-  - *Streamlines*: speed-coloured, CFD-post-processor style, seeded on the blade disc.
-  - *Ground wind-speed map*, and *x-ray* walls and roof to see the flow inside the house.
-- **2D mode**: a plan-view slice through the same 3D solution at a height you choose. Dense flow
-  streaks, the true cross-section of every body, and the pressure force on each one split into
-  drag **D** (along the oncoming wind) and side force **S**.
+The UI is laid out like a 3D editor: a scene **outliner** on the left (eye icons switch
+sources and bodies on and off), an **inspector** on the right for whatever is selected (or
+scene settings when nothing is), a toolbar on top and a perspective / orthographic switch
+with an axis gizmo at the bottom.
+
+- **Wind sources**
+  - *Stand fan*: speed (off, 1, 2, 3 or a slider), **swing** on or off, sweep, a live
+    direction read-out that follows the swinging head, tilt and height, plus a smoke rake.
+  - *Industrial blower*: a motor-driven drum fan on a cart, a wider and stronger jet that you can tilt.
+  - *Exhaust fan*: a boxed extractor that pulls air off the tail of the car, wind-tunnel style.
+  - *Smoke machine*: a fog nozzle you can place anywhere, with output, jet and height controls.
+- **Bodies**: car, house (windows, a door, an interior partition and a gable roof), tree, shrub
+  and a paper-tag rig. Drag them in the viewport. The tree **sheds leaves** that fall, get carried
+  by the solver's wind, settle on the floor, roofs or the car, and get picked up again by strong gusts.
+- **Scenarios**: playground, wind tunnel (blower, exhaust fan and smoke at the nose of the car),
+  cross ventilation, and tree & shrub shelter.
+- **Visualisation**
+  - *Wind load on objects*: the static pressure of the air touching each surface, laid over
+    real PBR materials. It shows only where the load is significant: red where the wind hits,
+    blue where it sucks (lee side, roof). Surface flow streaks follow the near-wall velocity.
+  - *Smoke*: puffs advected through the field (true streaklines). They collide with the exact
+    body shapes, so they slide over the car instead of passing through it.
+  - *Streamlines*, a ground wind-speed map, and x-ray walls and roof.
+- **2D mode**: a plan-view slice at a height you choose, with dense flow streaks, true cross-sections
+  and the pressure force on each body split into drag **D** and side force **S**.
+- **Stages**: a dark automotive photo *studio* (cyclorama, overhead softboxes, polished concrete)
+  or a vehicle aero & safety *test hall*.
+- **Solver controls**: pause, resetting to still air, and orthographic or perspective cameras.
+
+## Rendering
+
+The car is lofted from cross-sections (clearcoat paint, glass, rubber tyres and five-spoke
+rims). Materials are `MeshPhysicalMaterial` with the wind-load map injected through
+`onBeforeCompile`. A soft shadow map comes from the key light, and foliage is made of
+instanced leaf cards. On desktop a post-processing pass adds the AgX tone curve, bloom,
+a vignette and SMAA; phones skip it.
 
 ## How the simulation works
 
@@ -55,7 +73,8 @@ stagnation pressure. Treat colours as relative, not as engineering data.
 
 ## Stack
 
-Next.js 16 (App Router) · React 19 · three.js 0.187 · @react-three/fiber 9 · drei 10 · zustand ·
+Next.js 16 (App Router) · React 19 · three.js 0.187 · @react-three/fiber 9 · drei 10 ·
+@react-three/postprocessing · zustand ·
 Vercel Speed Insights.
 
 ```bash

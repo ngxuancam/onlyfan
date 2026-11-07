@@ -196,6 +196,11 @@ export class Fluid {
     this.black = Int32Array.from(black);
   }
 
+  /** still air everywhere */
+  clear() {
+    for (const a of [this.u, this.v, this.w, this.u0, this.v0, this.w0, this.p, this.pAvg]) a.fill(0);
+  }
+
   isSolidAt(x: number, y: number, z: number): boolean {
     const i = Math.floor((x - this.min[0]) / this.h) + 1;
     const j = Math.floor((y - this.min[1]) / this.h) + 1;

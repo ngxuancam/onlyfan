@@ -109,10 +109,10 @@ export function FlowMap2D() {
       cv.width = Math.round(W * dpr);
       cv.height = Math.round(H * dpr);
       const narrow = W < 760;
-      const left = 12;
-      const right = narrow ? 12 : 352;
-      const top = narrow ? 120 : 80;
-      const bottom = narrow ? 90 : 60;
+      const left = narrow ? 12 : W < 1180 ? 254 : 288;
+      const right = narrow ? 12 : W < 1180 ? 304 : 320;
+      const top = narrow ? 130 : 70;
+      const bottom = narrow ? 90 : 40;
       scale = Math.min((W - left - right) / DOMAIN_SIZE[0], (H - top - bottom) / DOMAIN_SIZE[2]);
       ox = left + (W - left - right - DOMAIN_SIZE[0] * scale) / 2;
       oy = top + (H - top - bottom - DOMAIN_SIZE[2] * scale) / 2;

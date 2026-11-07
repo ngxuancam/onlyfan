@@ -7,6 +7,7 @@ import { field, uploadField } from "@/sim/field";
 import type { FromWorker, LineSpec, ToWorker } from "@/sim/protocol";
 import type { PlacedObject, ObjKind } from "@/sim/obstacles";
 import { useLab } from "@/lib/store";
+import { setCollisionObjects } from "@/sim/collide";
 import { sharedUniforms } from "./heatMaterial";
 
 function placedObjects(): PlacedObject[] {
@@ -25,6 +26,7 @@ export function SimDriver({ quality, onReady }: { quality: Quality; onReady: (l:
   const busy = useRef(true);
   const lastSend = useRef(0);
   const sentLayout = useRef(-1);
+  const resetSeen = useRef(0);
   const meter = useRef({ frames: 0, t: 0, steps: 0, ms: 0, max: 0 });
 
   useEffect(() => {
@@ -95,21 +97,34 @@ export function SimDriver({ quality, onReady }: { quality: Quality; onReady: (l:
     }
 
     const w = worker.current;
-    if (!w || busy.current) return;
+    if (!w) return;
+    if (resetSeen.current !== s.resetToken) {
+      resetSeen.current = s.resetToken;
+      w.postMessage({ type: "reset" } satisfies ToWorker);
+    }
+    if (busy.current || s.paused) {
+      lastSend.current = now;
+      return;
+    }
     const dt = Math.min(1 / 15, Math.max(1 / 120, now - lastSend.current));
     lastSend.current = now;
     const msg: ToWorker = {
       type: "step",
       dt,
       fan: { c: field.fan.c, d: field.fan.d, R: FAN_RADIUS, U: field.fan.U, spin: field.fan.spin },
-      extra:
-        field.exhaust.on && field.exhaust.U > 0.05
+      extra: [
+        ...(field.exhaust.on && field.exhaust.U > 0.05
           ? [{ c: field.exhaust.c, d: field.exhaust.d, R: EXHAUST_RADIUS, U: field.exhaust.U, spin: 0 }]
-          : [],
+          : []),
+        ...Object.values(field.discs)
+          .filter((q) => q.on && q.U > 0.05)
+          .map((q) => ({ c: q.c, d: q.d, R: q.R, U: q.U, spin: 0 })),
+      ],
       streamlines: s.layers.streamlines,
     };
     if (sentLayout.current !== s.layoutVersion) {
       msg.objects = placedObjects();
+      setCollisionObjects(msg.objects);
       sentLayout.current = s.layoutVersion;
     }
     busy.current = true;
