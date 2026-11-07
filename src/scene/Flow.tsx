@@ -323,32 +323,55 @@ float gridLine(vec2 p, float step, float w) {
   vec2 l = 1.0 - smoothstep(vec2(0.0), fw, g);
   return max(l.x, l.y);
 }
+float hash2(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+float vn2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), f.x), mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 void main() {
   vec3 uvw = (vec3(vWorld.x, uCell * 1.5, vWorld.z) - uMin) / uSize;
   vec2 inside2 = step(vec2(0.0), uvw.xz) * step(uvw.xz, vec2(1.0));
   float inside = inside2.x * inside2.y;
   vec4 f = texture(uField, uvw);
   float val = f.r;
-  vec3 base = vec3(0.028, 0.032, 0.04);
-  // the map fades in with intensity so still air stays dark
+
+  // lab floor: grey epoxy with a little mottling and 2 m tile seams
+  float mott = vn2(vWorld.xz * 1.3) * 0.6 + vn2(vWorld.xz * 6.0) * 0.4;
+  vec3 base = vec3(0.155, 0.165, 0.178) * (0.92 + 0.12 * mott);
+  // the test zone (simulated volume) is a slightly darker, cooler pad
+  base = mix(base, vec3(0.11, 0.125, 0.14) * (0.94 + 0.1 * mott), inside);
+  float seam = gridLine(vWorld.xz, 2.0, 1.0);
+  base *= 1.0 - 0.22 * seam;
+
+  // signed distance (m) to the test-zone border, positive outside
+  vec2 d2 = max(uMin.xz - vWorld.xz, vWorld.xz - (uMin.xz + uSize.xz));
+  float dOut = max(d2.x, d2.y);
+  // hazard band just outside the zone: yellow/black diagonal stripes
+  float bandMask = step(0.05, dOut) * (1.0 - step(0.33, dOut));
+  float stripe = step(0.5, fract((vWorld.x + vWorld.z) * 2.6));
+  vec3 hazard = mix(vec3(0.05), vec3(0.95, 0.72, 0.08), stripe);
+  base = mix(base, hazard * 0.85, bandMask);
+  // walkway lines along the hall
+  float walk = (1.0 - smoothstep(0.04, 0.06, abs(abs(vWorld.z) - 7.6))) * step(-10.5, vWorld.x) * step(vWorld.x, 20.5);
+  base = mix(base, vec3(0.9, 0.7, 0.1) * 0.8, walk);
+
+  // wind-speed map on the pad
   float amt = smoothstep(0.02, 0.35, val);
   vec3 hm = heat(val);
   float band = abs(fract(val * 14.0) - 0.5);
   float iso = 1.0 - smoothstep(0.0, 0.07, band);
-  vec3 col = base + hm * (0.08 + 0.55 * amt) * uGround * inside;
+  vec3 col = mix(base, base * 0.35 + hm * (0.1 + 0.6 * amt), uGround * inside * (0.25 + 0.75 * amt));
   col *= 1.0 - 0.25 * iso * amt * uGround * inside;
-  // footprint shadow of solid obstacles
-  col *= 1.0 - 0.55 * f.a * inside;
+  // soft contact shadow under solid obstacles
+  col *= 1.0 - 0.5 * f.a * inside;
+  // 1 m measuring grid inside the zone only
   float minor = gridLine(vWorld.xz, 1.0, 1.0);
-  float major = gridLine(vWorld.xz, 5.0, 1.5);
-  float r = length(vWorld.xz - vec2(5.0, 0.0));
-  float fade = 1.0 - smoothstep(10.0, 30.0, r);
-  col += vec3(0.5, 0.6, 0.75) * (minor * 0.045 + major * 0.09) * fade;
-  // domain outline
-  vec2 e = min(uvw.xz, 1.0 - uvw.xz) * uSize.xz;
-  float edge = (1.0 - smoothstep(0.0, fwidth(vWorld.x) * 1.5, abs(min(e.x, e.y)))) * step(-0.05, min(e.x, e.y));
-  col += vec3(1.0, 0.48, 0.1) * edge * 0.35;
-  gl_FragColor = vec4(col * fade + base * (1.0 - fade), 1.0);
+  col += vec3(0.55, 0.65, 0.8) * minor * 0.05 * inside;
+  // ceiling light strips reflected on the epoxy (fake, cheap)
+  float refl = (1.0 - smoothstep(0.0, 0.9, abs(fract((vWorld.z + 9.0) / 4.5) - 0.5) * 4.5)) * 0.05;
+  col += vec3(0.8, 0.88, 1.0) * refl * (1.0 - inside * 0.5);
+  gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }
 `;
@@ -370,7 +393,7 @@ export function Ground() {
   });
   return (
     <mesh rotation-x={-Math.PI / 2} position={[5, 0, 0]} material={material} renderOrder={-1}>
-      <planeGeometry args={[90, 90]} />
+      <planeGeometry args={[32, 19]} />
     </mesh>
   );
 }
@@ -384,7 +407,7 @@ export function DomainBox() {
   }, []);
   return (
     <lineSegments geometry={geo}>
-      <lineBasicMaterial color="#5b6b80" transparent opacity={0.18} />
+      <lineBasicMaterial color="#f2b31a" transparent opacity={0.14} />
     </lineSegments>
   );
 }
