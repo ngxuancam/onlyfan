@@ -31,3 +31,13 @@ export function ShadowCasters() {
   });
   return null;
 }
+
+/** Re-renders the shadow map only every `every` frames (it is the costliest pass after smoke). */
+export function ShadowThrottle({ every }: { every: number }) {
+  const n = useRef(0);
+  useFrame(({ gl }) => {
+    gl.shadowMap.autoUpdate = false;
+    if (n.current++ % every === 0) gl.shadowMap.needsUpdate = true;
+  });
+  return null;
+}

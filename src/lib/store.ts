@@ -1,6 +1,7 @@
 "use client";
 import { create } from "zustand";
 import type { ObjKind } from "@/sim/obstacles";
+import type { Perf } from "./perf";
 
 /** Everything that can be placed in the scene besides the stand fan. */
 export type ObjKey = ObjKind | "rig" | "exhaust" | "blower" | "smoker";
@@ -73,6 +74,11 @@ export type Theme = "studio" | "hall";
 export type CameraMode = "perspective" | "orthographic";
 
 interface S {
+  /** rendering budget (see lib/perf.ts) */
+  perf: Perf;
+  /** true once the user picked a level: no more automatic downgrades */
+  perfPinned: boolean;
+  setPerf: (p: Perf, pinned?: boolean) => void;
   view: View;
   theme: Theme;
   camera: CameraMode;
@@ -207,6 +213,9 @@ export const PRESETS: Record<
 };
 
 export const useLab = create<S>((set) => ({
+  perf: "balanced",
+  perfPinned: false,
+  setPerf: (perf, pinned = false) => set((s) => ({ perf, perfPinned: pinned || s.perfPinned })),
   view: "3d",
   theme: "studio",
   camera: "perspective",

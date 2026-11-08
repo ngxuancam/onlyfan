@@ -175,7 +175,7 @@ void main() {
   // rake: a thin filament that widens; cloud: big puffs that keep billowing out
   float grow = aKind < 0.5 ? 0.04 + 0.42 * sqrt(aAge) : 0.4 + 1.25 * sqrt(aAge) + 0.08 * aAge;
   vGrow = grow;
-  gl_PointSize = min(uSize * grow / -mv.z, 900.0);
+  gl_PointSize = min(uSize * grow / -mv.z, 420.0);
   gl_Position = projectionMatrix * mv;
 }
 `;
@@ -198,7 +198,7 @@ float noise(vec2 p) {
 float fbm(vec2 p) {
   float v = 0.0;
   float amp = 0.5;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < OCTAVES; i++) {
     v += amp * noise(p);
     p *= 2.1;
     amp *= 0.5;
@@ -210,7 +210,7 @@ void main() {
   float maxAge = cloud ? 11.5 : 5.5;
   if (vAge > maxAge) discard;
   vec2 d = gl_PointCoord - 0.5;
-  float a = vSeed * 6.2831 + vAge * (cloud ? 0.12 : 0.0) * (vSeed - 0.5);
+  float a = vSeed * 6.2831;
   d = mat2(cos(a), -sin(a), sin(a), cos(a)) * d;
   float r = length(d) * 2.0;
   if (r > 1.0) discard;
@@ -244,7 +244,7 @@ function rakeNozzles(): [number, number][] {
   return out;
 }
 
-export function Smoke({ count }: { count: number }) {
+export function Smoke({ count, octaves }: { count: number; octaves: number }) {
   const visible = useLab((s) => s.layers.smoke || s.objects.smoker.enabled);
   const studio = useLab((s) => s.theme === "studio");
   const nozzles = useMemo(() => rakeNozzles(), []);
@@ -260,14 +260,17 @@ export function Smoke({ count }: { count: number }) {
     const m = new THREE.ShaderMaterial({
       vertexShader: sVertex,
       fragmentShader: sFragment,
+      defines: { OCTAVES: octaves },
       uniforms: { uSize: { value: 380 }, uOpacity: { value: 0.3 }, uLo: { value: new THREE.Color("#7b8696") }, uHi: { value: new THREE.Color("#e2e8f0") } },
       transparent: true,
       depthWrite: false,
     });
     // own (ballistic) velocity of each puff, decays to zero: the nozzle push and the billow
     const own = new Float32Array(count * 3);
-    return { geometry: g, material: m, state: { cursor: 0, rakeCarry: 0, cloudCarry: 0, own } };
-  }, [count]);
+    // per-puff phases for a smooth swirl (instead of a per-frame random kick, which jitters)
+    const ph = Float32Array.from({ length: count * 3 }, () => Math.random() * Math.PI * 2);
+    return { geometry: g, material: m, state: { cursor: 0, rakeCarry: 0, cloudCarry: 0, own, ph, frame: 0, t: 0 } };
+  }, [count, octaves]);
 
   const tmp = useMemo(() => ({ v: [0, 0, 0] as Vec3, e1: new THREE.Vector3(), e2: new THREE.Vector3(), d: new THREE.Vector3() }), []);
 
@@ -337,8 +340,12 @@ export function Smoke({ count }: { count: number }) {
       }
     }
 
-    // advect: solver wind + the puff's own decaying momentum + turbulent mixing
+    // advect: solver wind + the puff's own decaying momentum + turbulent mixing.
+    // Exact collision is checked on alternate halves of the buffer each frame (cheap, and a
+    // puff never moves far enough in two frames to cross a body).
     const decay = Math.exp(-1.3 * dt);
+    state.t += dt;
+    const half = state.frame++ & 1;
     for (let i = 0; i < count; i++) {
       const cloud = kind[i] > 0.5;
       if (age[i] > (cloud ? 12 : 6)) continue;
@@ -350,17 +357,23 @@ export function Smoke({ count }: { count: number }) {
       own[o] *= decay;
       own[o + 1] *= decay;
       own[o + 2] *= decay;
-      const k = (cloud ? Math.min(1.6, 0.25 + age[i] * 0.22) : Math.min(0.9, 0.06 + age[i] * 0.3)) * Math.sqrt(dt);
+      // turbulent mixing as a smooth swirl: varies slowly in time and space, grows with age
+      const amp = cloud ? Math.min(0.7, 0.18 + age[i] * 0.08) : Math.min(0.4, 0.04 + age[i] * 0.12);
+      const t = state.t;
+      const p = state.ph;
+      const tx = amp * Math.sin(t * 0.9 + p[o] + y * 1.3 + z * 0.7);
+      const ty = amp * 0.55 * Math.sin(t * 0.7 + p[o + 1] + x * 0.9 + z * 1.1);
+      const tz = amp * Math.sin(t * 0.8 + p[o + 2] + x * 1.1 + y * 0.6);
       // a cloud slowly lifts as it spreads
       const lift = cloud ? 0.06 : 0;
-      let nx = x + (tmp.v[0] + own[o]) * dt + (Math.random() - 0.5) * k;
-      let ny = y + (tmp.v[1] + own[o + 1] + lift) * dt + (Math.random() - 0.5) * k * 0.8;
-      let nz = z + (tmp.v[2] + own[o + 2]) * dt + (Math.random() - 0.5) * k;
+      let nx = x + (tmp.v[0] + own[o] + tx) * dt;
+      let ny = y + (tmp.v[1] + own[o + 1] + lift + ty) * dt;
+      let nz = z + (tmp.v[2] + own[o + 2] + tz) * dt;
       if (ny < 0.03) {
         ny = 0.03;
         own[o + 1] = Math.abs(own[o + 1]) * 0.3;
       }
-      if (solidExact(nx, ny, nz)) {
+      if ((i & 1) === half && solidExact(nx, ny, nz)) {
         // hit a body: slide along its surface, keeping the largest part of the step that
         // stays in the air; failing that, lift off the surface a little
         own[o] *= 0.4;

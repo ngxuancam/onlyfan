@@ -259,6 +259,8 @@ function SceneInspector() {
   const setTheme = useLab((s) => s.setTheme);
   const camera = useLab((s) => s.camera);
   const setCamera = useLab((s) => s.setCamera);
+  const perf = useLab((s) => s.perf);
+  const setPerf = useLab((s) => s.setPerf);
   const layers = useLab((s) => s.layers);
   const set = useLab((s) => s.setLayers);
   const st = useLab((s) => s.stats);
@@ -291,6 +293,16 @@ function SceneInspector() {
             ["hall", "Test hall"],
           ]}
           onChange={setTheme}
+        />
+        <Choice
+          label="Quality"
+          value={perf}
+          options={[
+            ["high", "High"],
+            ["balanced", "Balanced"],
+            ["low", "Low"],
+          ]}
+          onChange={(p) => setPerf(p, true)}
         />
         <Choice
           label="Camera"

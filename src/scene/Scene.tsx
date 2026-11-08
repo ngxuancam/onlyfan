@@ -24,7 +24,8 @@ import { DomainBox, Ground, HALL_BG, STUDIO_BG, Smoke, Streamlines } from "./Flo
 import { Blower, Leaves, SmokeMachine } from "./Sources";
 import { StudioStage } from "./StudioStage";
 import { Effects } from "./Effects";
-import { ShadowCasters } from "./ShadowCasters";
+import { ShadowCasters, ShadowThrottle } from "./ShadowCasters";
+import { PERF, lowerPerf } from "@/lib/perf";
 
 export default function Scene({ quality }: { quality: Quality }) {
   const [line, setLine] = useState<LineSpec | null>(null);
@@ -32,17 +33,17 @@ export default function Scene({ quality }: { quality: Quality }) {
   const dragging = useLab((s) => s.dragging);
   const theme = useLab((s) => s.theme);
   const camMode = useLab((s) => s.camera);
-  const maxDpr = quality === "high" ? 1.75 : 1.25;
-  const [dpr, setDpr] = useState(maxDpr);
+  const perf = useLab((s) => s.perf);
+  const budget = PERF[perf];
 
   return (
     <Canvas
       className="scene"
-      dpr={dpr}
+      dpr={[1, budget.dpr]}
       shadows="soft"
       // with the composer the tone curve is applied as a post effect (AgX), so the renderer stays linear
-      flat={quality === "high"}
-      gl={{ antialias: quality !== "high", powerPreference: "high-performance" }}
+      flat={budget.effects !== "none"}
+      gl={{ antialias: false, powerPreference: "high-performance" }}
       onPointerMissed={() => useLab.getState().select(null)}
     >
       {camMode === "perspective" ? (
@@ -50,15 +51,23 @@ export default function Scene({ quality }: { quality: Quality }) {
       ) : (
         <OrthographicCamera makeDefault position={[-14, 14, 18]} zoom={42} near={-100} far={300} />
       )}
-      <PerformanceMonitor onDecline={() => setDpr(1)} onIncline={() => setDpr(maxDpr)} />
+      {/* step the render budget down when the frame rate stays low (until the user pins a level) */}
+      <PerformanceMonitor
+        flipflops={3}
+        onDecline={() => {
+          const s = useLab.getState();
+          if (!s.perfPinned) s.setPerf(lowerPerf(s.perf));
+        }}
+      />
+      <ShadowThrottle every={budget.shadowEvery} />
       <color attach="background" args={[theme === "studio" ? STUDIO_BG : HALL_BG]} />
       <ambientLight intensity={0.18} />
       {/* key light: the only shadow caster, sized to the test zone */}
       <directionalLight
         position={[-7, 13, 8]}
         intensity={3.4}
-        castShadow
-        shadow-mapSize={[quality === "high" ? 2048 : 1024, quality === "high" ? 2048 : 1024]}
+        castShadow={budget.shadowMap > 0}
+        shadow-mapSize={[budget.shadowMap || 512, budget.shadowMap || 512]}
         shadow-bias={-0.0004}
         shadow-normalBias={0.03}
         shadow-camera-left={-16}
@@ -99,7 +108,7 @@ export default function Scene({ quality }: { quality: Quality }) {
       <SmokeMachine />
       <Leaves />
       {line && <Streamlines spec={line} />}
-      <Smoke count={quality === "high" ? 20000 : 8000} />
+      <Smoke count={budget.smoke} octaves={budget.octaves} />
 
       <OrbitControls
         makeDefault
@@ -113,7 +122,7 @@ export default function Scene({ quality }: { quality: Quality }) {
         maxZoom={160}
         maxPolarAngle={Math.PI * 0.485}
       />
-      <Effects quality={quality} />
+      <Effects mode={budget.effects} />
       <GizmoHelper alignment="bottom-center" margin={[0, 96]}>
         <GizmoViewport axisColors={["#ff5a5a", "#3ee08f", "#4c8dff"]} labelColor="#0b0d11" />
       </GizmoHelper>
