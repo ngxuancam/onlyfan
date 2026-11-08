@@ -8,6 +8,7 @@ import { sampleVel } from "@/sim/field";
 import { paletteJS } from "@/lib/palette";
 import { useLab } from "@/lib/store";
 import { SelectionRing, useDrag } from "./Obstacles";
+import { simClock, simDt } from "@/lib/simClock";
 
 /**
  * Paper tags hanging from a bar. Each tag is a spherical pendulum: gravity plus a
@@ -69,10 +70,11 @@ export function TagStrips({
     [],
   );
 
-  useFrame((st, delta) => {
+  useFrame((_, delta) => {
     const m = mesh.current;
     if (!m || !m.parent) return;
-    const dt = Math.min(delta, 1 / 30);
+    const dt = simDt(delta);
+    if (dt === 0) return; // paused
     const parent = m.parent;
     parent.updateWorldMatrix(true, false);
     tmp.inv.copy(parent.matrixWorld).invert();
@@ -80,7 +82,7 @@ export function TagStrips({
     tmp.b.set(...to).applyMatrix4(parent.matrixWorld);
     tmp.axis.subVectors(tmp.b, tmp.a).normalize();
     const width = Math.min(0.13, (tmp.a.distanceTo(tmp.b) / count) * 0.8);
-    const t = st.clock.elapsedTime;
+    const t = simClock.t;
     const sub = 2;
     for (let i = 0; i < count; i++) {
       const tip = state.tips[i];

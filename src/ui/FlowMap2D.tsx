@@ -200,7 +200,8 @@ export function FlowMap2D() {
     let last = performance.now();
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
-      const dt = Math.min(0.05, (now - last) / 1000);
+      // paused: the streaks freeze in place (the map keeps drawing so you can still pan/drag)
+      const dt = useLab.getState().paused ? 0 : Math.min(0.05, (now - last) / 1000);
       last = now;
       const s = useLab.getState();
       const y = s.slice;

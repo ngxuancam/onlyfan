@@ -746,3 +746,8 @@ input[type="range"]::-moz-range-thumb {
     display: none;
   }
 }
+
+/* paused: nothing moves, not even the logo */
+.is-paused .brand-mark {
+  animation-play-state: paused;
+}

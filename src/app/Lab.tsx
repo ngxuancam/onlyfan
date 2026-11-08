@@ -13,8 +13,9 @@ const Stage = dynamic(() => import("./Stage"), {
 export function Lab() {
   const view = useLab((s) => s.view);
   const theme = useLab((s) => s.theme);
+  const paused = useLab((s) => s.paused);
   return (
-    <div className={`editor theme-${theme}`}>
+    <div className={`editor theme-${theme} ${paused ? "is-paused" : ""}`}>
       {/* the 3D stage keeps running in 2D mode: it owns the fans and feeds the solver */}
       <div className={`stage ${view === "2d" ? "is-hidden" : ""}`}>
         <Stage />

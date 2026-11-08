@@ -55,6 +55,8 @@ export default function Scene({ quality }: { quality: Quality }) {
       <PerformanceMonitor
         flipflops={3}
         onDecline={() => {
+          // a background or unfocused tab is throttled by the browser: that is not a slow GPU
+          if (document.visibilityState !== "visible" || !document.hasFocus()) return;
           const s = useLab.getState();
           if (!s.perfPinned) s.setPerf(lowerPerf(s.perf));
         }}

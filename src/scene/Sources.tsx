@@ -8,6 +8,7 @@ import { SHAPES } from "@/sim/obstacles";
 import { solidExact } from "@/sim/collide";
 import { useLab } from "@/lib/store";
 import { SelectionRing, useDrag } from "./Obstacles";
+import { simClock, simDt } from "@/lib/simClock";
 
 /* ================================================== industrial blower */
 
@@ -57,13 +58,14 @@ export function Blower() {
   useFrame((_, delta) => {
     const st = useLab.getState();
     const target = st.objects.blower.enabled ? st.params.blowerPower : 0;
-    omega.current += (target * 22 - omega.current) * Math.min(1, delta * 1.0);
+    const bdt = simDt(delta, 1 / 20);
+    omega.current += (target * 22 - omega.current) * Math.min(1, bdt * 1.0);
     // a ducted drum fan: drives a long, uniform plug of air, much harder than the stand fan
     const disc = (field.discs.blower ??= { c: [0, 1, 0], d: [1, 0, 0], R: BLOWER_RADIUS, U: 0, on: false, depth: 1.5, gain: 2.5, ducted: true });
     disc.on = st.objects.blower.enabled;
     disc.U = (omega.current / 22) * BLOWER_MAX;
     if (rotor.current) {
-      rotor.current.rotation.x += omega.current * delta;
+      rotor.current.rotation.x += omega.current * bdt;
       rotor.current.updateWorldMatrix(true, false);
       tmp.c.setFromMatrixPosition(rotor.current.matrixWorld);
       tmp.d.set(1, 0, 0).transformDirection(rotor.current.parent!.matrixWorld);
@@ -177,7 +179,7 @@ export function SmokeMachine() {
   const led = useRef<THREE.MeshBasicMaterial>(null);
   const tmp = useMemo(() => ({ c: new THREE.Vector3(), d: new THREE.Vector3() }), []);
 
-  useFrame((st) => {
+  useFrame(() => {
     const s = useLab.getState();
     const on = s.objects.smoker.enabled;
     field.smoker.on = on;
@@ -194,7 +196,7 @@ export function SmokeMachine() {
       disc.c = [tmp.c.x + tmp.d.x * 0.3, tmp.c.y, tmp.c.z + tmp.d.z * 0.3];
       disc.d = field.smoker.d;
     }
-    if (led.current) led.current.color.set(Math.floor(st.clock.elapsedTime * 3) % 2 ? "#3ee08f" : "#0b3d24");
+    if (led.current) led.current.color.set(Math.floor(simClock.t * 3) % 2 ? "#3ee08f" : "#0b3d24");
   });
 
   if (!o.enabled) return null;
@@ -286,7 +288,7 @@ export function Leaves() {
   );
   const canopy = useMemo(() => SHAPES.tree.filter((p) => p.t === "ell"), []);
 
-  useFrame((clock, delta) => {
+  useFrame((_, delta) => {
     const m = mesh.current;
     if (!m) return;
     if (!st.colored) {
@@ -294,10 +296,11 @@ export function Leaves() {
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
       st.colored = true;
     }
-    const dt = Math.min(delta, 1 / 30);
+    const dt = simDt(delta);
+    if (dt === 0 && st.colored) return; // paused: leaves hang where they are
     const s = useLab.getState();
     const tree = s.objects.tree;
-    const t = clock.clock.elapsedTime;
+    const t = simClock.t;
 
     // shed new leaves from random points inside the canopy
     if (tree.enabled && s.params.leaves && !s.paused) {

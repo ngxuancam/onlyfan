@@ -10,6 +10,7 @@ import type { PlacedObject, ObjKind } from "@/sim/obstacles";
 import { useLab } from "@/lib/store";
 import { setCollisionObjects } from "@/sim/collide";
 import { sharedUniforms } from "./heatMaterial";
+import { simClock } from "@/lib/simClock";
 
 /**
  * The extractor as two momentum discs: its own ducted outflow, plus a wider intake zone
@@ -93,8 +94,10 @@ export function SimDriver({ quality, onReady }: { quality: Quality; onReady: (l:
 
   useFrame((st, delta) => {
     const now = st.clock.elapsedTime;
-    sharedUniforms.uTime.value = now;
     const s = useLab.getState();
+    // simulation time: frozen while paused (streamline pulses, surface streaks...)
+    if (!s.paused) simClock.t += Math.min(delta, 1 / 20);
+    sharedUniforms.uTime.value = simClock.t;
     // global heat-map fade
     const target = s.layers.surfaceHeat ? 1 : 0;
     sharedUniforms.uHeat.value += (target - sharedUniforms.uHeat.value) * Math.min(1, delta * 6);

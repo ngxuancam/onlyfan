@@ -7,6 +7,7 @@ import { FAN_MAX_SPEED, FAN_RADIUS } from "@/sim/config";
 import { field } from "@/sim/field";
 import { useLab } from "@/lib/store";
 import { SelectionRing, useDrag } from "./Obstacles";
+import { simDt } from "@/lib/simClock";
 
 /**
  * A classic stand fan: round base, telescoping two-tone pole, motor head,
@@ -112,7 +113,7 @@ export function Fan() {
   const tmp = useMemo(() => ({ c: new THREE.Vector3(), d: new THREE.Vector3() }), []);
 
   useFrame((_, delta) => {
-    const dt = Math.min(delta, 1 / 20);
+    const dt = simDt(delta, 1 / 20);
     const s = sim.current;
     const f = useLab.getState().fan;
     const spd = f.enabled ? f.speed : 0;

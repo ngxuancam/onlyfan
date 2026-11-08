@@ -6,6 +6,7 @@ import { EXHAUST_HEIGHT, EXHAUST_RADIUS, FAN_MAX_SPEED } from "@/sim/config";
 import { field } from "@/sim/field";
 import { useLab } from "@/lib/store";
 import { SelectionRing, useDrag } from "./Obstacles";
+import { simDt } from "@/lib/simClock";
 
 /**
  * A boxed extractor fan on a low stand. Its intake faces -X locally (towards the car) and
@@ -32,12 +33,13 @@ export function Exhaust() {
   const tmp = useMemo(() => ({ c: new THREE.Vector3(), d: new THREE.Vector3() }), []);
 
   useFrame((_, delta) => {
+    const dt = simDt(delta, 1 / 20);
     const st = useLab.getState();
     const ex = st.objects.exhaust;
     const target = ex.enabled ? st.fan.suction : 0;
-    omega.current += (target * 26 - omega.current) * Math.min(1, delta * 1.2);
+    omega.current += (target * 26 - omega.current) * Math.min(1, dt * 1.2);
     if (rotor.current) {
-      rotor.current.rotation.x += omega.current * delta;
+      rotor.current.rotation.x += omega.current * dt;
       rotor.current.updateWorldMatrix(true, false);
       tmp.c.setFromMatrixPosition(rotor.current.matrixWorld);
       tmp.d.set(1, 0, 0).transformDirection(rotor.current.parent!.matrixWorld);

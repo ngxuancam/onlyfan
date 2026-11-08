@@ -9,6 +9,7 @@ import type { LineSpec } from "@/sim/protocol";
 import { PALETTE_GLSL } from "@/lib/palette";
 import { useLab } from "@/lib/store";
 import { sharedUniforms } from "./heatMaterial";
+import { simDt } from "@/lib/simClock";
 
 /* ========================================================= streamlines */
 
@@ -276,7 +277,8 @@ export function Smoke({ count, octaves }: { count: number; octaves: number }) {
 
   useFrame((_, delta) => {
     if (!field.vel || useLab.getState().view === "2d") return;
-    const dt = Math.min(delta, 1 / 30);
+    const dt = simDt(delta);
+    if (dt === 0) return; // paused: the smoke hangs in the air
     const pos = geometry.attributes.position.array as Float32Array;
     const age = geometry.attributes.aAge.array as Float32Array;
     const kind = geometry.attributes.aKind.array as Float32Array;
@@ -330,9 +332,14 @@ export function Smoke({ count, octaves }: { count: number; octaves: number }) {
           rx /= rl;
           ry /= rl;
           rz /= rl;
-          const spread = 0.6 + Math.random() * 1.4;
+          // spread only across the nozzle axis, symmetric, so the jet stays centred on the nozzle
+          const ax = rx * sm.d[0] + ry * sm.d[1] + rz * sm.d[2];
+          rx -= ax * sm.d[0];
+          ry -= ax * sm.d[1];
+          rz -= ax * sm.d[2];
+          const spread = (0.2 + Math.random() * 0.55) * Math.sqrt(Math.random());
           own[i * 3] = sm.d[0] * push + rx * spread;
-          own[i * 3 + 1] = sm.d[1] * push + Math.abs(ry) * spread * 0.6;
+          own[i * 3 + 1] = sm.d[1] * push + ry * spread;
           own[i * 3 + 2] = sm.d[2] * push + rz * spread;
           kind[i] = 1;
           age[i] = Math.random() * dt;
@@ -365,7 +372,7 @@ export function Smoke({ count, octaves }: { count: number; octaves: number }) {
       const ty = amp * 0.55 * Math.sin(t * 0.7 + p[o + 1] + x * 0.9 + z * 1.1);
       const tz = amp * Math.sin(t * 0.8 + p[o + 2] + x * 1.1 + y * 0.6);
       // a cloud slowly lifts as it spreads
-      const lift = cloud ? 0.06 : 0;
+      const lift = cloud ? 0.015 : 0;
       let nx = x + (tmp.v[0] + own[o] + tx) * dt;
       let ny = y + (tmp.v[1] + own[o + 1] + lift + ty) * dt;
       let nz = z + (tmp.v[2] + own[o + 2] + tz) * dt;

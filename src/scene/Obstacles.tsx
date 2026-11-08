@@ -9,6 +9,7 @@ import { useLab, type Selectable } from "@/lib/store";
 import { makeHeatMaterial, type PbrOpts } from "./heatMaterial";
 import { CarModel } from "./CarModel";
 import { TagStrips } from "./TagRig";
+import { simClock } from "@/lib/simClock";
 
 /* ------------------------------------------------------------ geometry */
 
@@ -145,10 +146,10 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 export function SelectionRing({ radius, active }: { radius: number; active: boolean }) {
   const ref = useRef<THREE.Mesh>(null);
-  useFrame((st) => {
+  useFrame(() => {
     if (!ref.current) return;
     ref.current.visible = active;
-    ref.current.rotation.z = st.clock.elapsedTime * 0.4;
+    ref.current.rotation.z = simClock.t * 0.4;
   });
   return (
     <mesh ref={ref} rotation-x={-Math.PI / 2} position-y={0.015}>
