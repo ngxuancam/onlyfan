@@ -151,23 +151,31 @@ export function Streamlines({ spec }: { spec: LineSpec }) {
 /* =============================================================== smoke */
 
 /**
- * Smoke-gun visualisation: a rake of nozzles just in front of the guard emits a steady
- * stream of soft puffs. Each puff is advected through the solver's velocity field, so the
- * trails are true streaklines: they curl over the car, squeeze through windows and
- * spread as they age (a small random walk stands in for sub-grid turbulent mixing).
+ * Two kinds of smoke share one particle buffer:
+ *  - the *rake* in front of the stand fan: thin streaklines, advected purely by the solver;
+ *  - the *smoke machine* cloud: big, dense, slowly billowing puffs (think of a smoke
+ *    grenade). Each puff leaves the nozzle with its own momentum that decays in a second or
+ *    two, then rides the solver's wind, spreading and filling the space for ~11 s.
+ * Puffs collide with the exact body shapes and fade near the floor so they never show a
+ * hard line where a sprite cuts into the ground.
  */
 const sVertex = /* glsl */ `
 attribute float aAge;
 attribute float aSeed;
+attribute float aKind;
 uniform float uSize;
 varying float vAge;
 varying float vSeed;
+varying float vKind;
+varying float vY;
+varying float vGrow;
 void main() {
-  vAge = aAge; vSeed = aSeed;
+  vAge = aAge; vSeed = aSeed; vKind = aKind; vY = position.y;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  // puffs leave the nozzle as a thin filament and billow out
-  float grow = 0.04 + 0.42 * sqrt(aAge);
-  gl_PointSize = uSize * grow / -mv.z;
+  // rake: a thin filament that widens; cloud: big puffs that keep billowing out
+  float grow = aKind < 0.5 ? 0.04 + 0.42 * sqrt(aAge) : 0.4 + 1.25 * sqrt(aAge) + 0.08 * aAge;
+  vGrow = grow;
+  gl_PointSize = min(uSize * grow / -mv.z, 900.0);
   gl_Position = projectionMatrix * mv;
 }
 `;
@@ -177,26 +185,52 @@ uniform vec3 uLo;
 uniform vec3 uHi;
 varying float vAge;
 varying float vSeed;
+varying float vKind;
+varying float vY;
+varying float vGrow;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
+// 5-octave fbm, as in a hand-made gun-smoke shader: gives the wispy, curdled edges
+float fbm(vec2 p) {
+  float v = 0.0;
+  float amp = 0.5;
+  for (int i = 0; i < 5; i++) {
+    v += amp * noise(p);
+    p *= 2.1;
+    amp *= 0.5;
+  }
+  return v;
+}
 void main() {
-  if (vAge > 5.5) discard;
+  bool cloud = vKind > 0.5;
+  float maxAge = cloud ? 11.5 : 5.5;
+  if (vAge > maxAge) discard;
   vec2 d = gl_PointCoord - 0.5;
-  float a = vSeed * 6.2831;
+  float a = vSeed * 6.2831 + vAge * (cloud ? 0.12 : 0.0) * (vSeed - 0.5);
   d = mat2(cos(a), -sin(a), sin(a), cos(a)) * d;
   float r = length(d) * 2.0;
   if (r > 1.0) discard;
-  float n = noise(d * 5.0 + vSeed * 17.0) * 0.6 + noise(d * 11.0 - vSeed * 9.0) * 0.4;
-  float soft = (1.0 - smoothstep(0.1, 1.0, r)) * (0.5 + 0.8 * n);
-  // dense at the nozzle, thinning out as the smoke mixes into the room
-  float life = smoothstep(0.0, 0.05, vAge) * (1.0 - smoothstep(1.5, 5.0, vAge));
-  float dens = uOpacity * soft * life / (1.0 + vAge * 1.3);
-  vec3 col = mix(uLo, uHi, smoothstep(-0.2, 0.6, n - d.y));
-  gl_FragColor = vec4(col, clamp(dens, 0.0, 1.0));
+  // noise scrolls through the puff as it ages, so the smoke keeps curling
+  vec2 uv = d * vec2(2.0, 2.4) * 2.2 + vSeed * 11.0;
+  uv.x -= vAge * 0.35;
+  float n = fbm(uv);
+  float radial = smoothstep(1.0, 0.1, r);
+  // thresholded fbm: dense curdled core, ragged wisps at the edge
+  float soft = cloud ? smoothstep(0.15, 0.75, n * radial * 1.35) * 1.6 : smoothstep(0.05, 0.6, n * radial * 1.2) * 1.3;
+  float life = cloud
+    ? smoothstep(0.0, 0.15, vAge) * (1.0 - smoothstep(7.5, 11.5, vAge))
+    : smoothstep(0.0, 0.05, vAge) * (1.0 - smoothstep(1.5, 5.0, vAge));
+  float dens = cloud ? uOpacity * 1.25 * soft * life / (1.0 + vAge * 0.22) : uOpacity * soft * life / (1.0 + vAge * 1.3);
+  // no hard edge where a big puff meets the floor
+  dens *= smoothstep(0.0, 0.18 + 0.25 * vGrow, vY);
+  // self-shadowed: darker underside and core, lit top
+  float lit = smoothstep(-0.25, 0.55, n - d.y * 1.2);
+  vec3 col = mix(uLo * (cloud ? 0.82 : 1.0), uHi, lit);
+  gl_FragColor = vec4(col, clamp(dens, 0.0, 0.95));
   #include <colorspace_fragment>
 }
 `;
@@ -218,6 +252,7 @@ export function Smoke({ count }: { count: number }) {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute("aAge", new THREE.BufferAttribute(new Float32Array(count).fill(99), 1).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute("aKind", new THREE.BufferAttribute(new Float32Array(count), 1).setUsage(THREE.DynamicDrawUsage));
     const seed = new Float32Array(count);
     for (let i = 0; i < count; i++) seed[i] = Math.random();
     g.setAttribute("aSeed", new THREE.BufferAttribute(seed, 1));
@@ -225,11 +260,13 @@ export function Smoke({ count }: { count: number }) {
     const m = new THREE.ShaderMaterial({
       vertexShader: sVertex,
       fragmentShader: sFragment,
-      uniforms: { uSize: { value: 380 }, uOpacity: { value: 0.3 }, uLo: { value: new THREE.Color(0.6, 0.65, 0.72) }, uHi: { value: new THREE.Color(0.98, 0.98, 0.96) } },
+      uniforms: { uSize: { value: 380 }, uOpacity: { value: 0.3 }, uLo: { value: new THREE.Color("#7b8696") }, uHi: { value: new THREE.Color("#e2e8f0") } },
       transparent: true,
       depthWrite: false,
     });
-    return { geometry: g, material: m, state: { cursor: 0, carry: 0 } };
+    // own (ballistic) velocity of each puff, decays to zero: the nozzle push and the billow
+    const own = new Float32Array(count * 3);
+    return { geometry: g, material: m, state: { cursor: 0, rakeCarry: 0, cloudCarry: 0, own } };
   }, [count]);
 
   const tmp = useMemo(() => ({ v: [0, 0, 0] as Vec3, e1: new THREE.Vector3(), e2: new THREE.Vector3(), d: new THREE.Vector3() }), []);
@@ -239,28 +276,27 @@ export function Smoke({ count }: { count: number }) {
     const dt = Math.min(delta, 1 / 30);
     const pos = geometry.attributes.position.array as Float32Array;
     const age = geometry.attributes.aAge.array as Float32Array;
+    const kind = geometry.attributes.aKind.array as Float32Array;
+    const own = state.own;
     const fan = field.fan;
-
-    // emit: a fixed total puff rate (the buffer cycles in about 5 s), shared between the
-    // rake in front of the stand fan and the smoke machine nozzle
     const st = useLab.getState();
-    const rakeOn = st.layers.smoke && fan.U > 0.2;
     const sm = field.smoker;
-    const wRake = rakeOn ? 1 : 0;
-    const wSmoke = sm.on ? 0.3 + sm.rate * 1.2 : 0;
-    const wSum = wRake + wSmoke;
-    if (wSum > 0 && !st.paused) {
-      tmp.d.set(...fan.d);
-      tmp.e1.set(0, 1, 0).cross(tmp.d).normalize();
-      tmp.e2.crossVectors(tmp.d, tmp.e1);
-      state.carry += (count / 5.2) * dt * Math.min(1, wSum);
-      let n = Math.floor(state.carry);
-      state.carry -= n;
-      const R = FAN_RADIUS;
-      while (n-- > 0) {
-        const i = state.cursor;
-        state.cursor = (state.cursor + 1) % count;
-        if (Math.random() * wSum < wRake) {
+    const take = () => {
+      const i = state.cursor;
+      state.cursor = (state.cursor + 1) % count;
+      return i;
+    };
+
+    if (!st.paused) {
+      // rake: thin streaklines from the stand fan
+      if (st.layers.smoke && fan.U > 0.2) {
+        tmp.d.set(...fan.d);
+        tmp.e1.set(0, 1, 0).cross(tmp.d).normalize();
+        tmp.e2.crossVectors(tmp.d, tmp.e1);
+        state.rakeCarry += (count / 9) * dt;
+        const R = FAN_RADIUS;
+        for (; state.rakeCarry >= 1; state.rakeCarry--) {
+          const i = take();
           const [a, b] = nozzles[(Math.random() * nozzles.length) | 0];
           const ja = a * R + (Math.random() - 0.5) * 0.03;
           const jb = b * R + (Math.random() - 0.5) * 0.03;
@@ -268,32 +304,68 @@ export function Smoke({ count }: { count: number }) {
           pos[i * 3] = fan.c[0] + tmp.d.x * fw + tmp.e1.x * ja + tmp.e2.x * jb;
           pos[i * 3 + 1] = fan.c[1] + tmp.d.y * fw + tmp.e1.y * ja + tmp.e2.y * jb;
           pos[i * 3 + 2] = fan.c[2] + tmp.d.z * fw + tmp.e1.z * ja + tmp.e2.z * jb;
-        } else {
-          const f = 0.04 + Math.random() * 0.12;
-          pos[i * 3] = sm.c[0] + sm.d[0] * f + (Math.random() - 0.5) * 0.05;
-          pos[i * 3 + 1] = sm.c[1] + (Math.random() - 0.5) * 0.05;
-          pos[i * 3 + 2] = sm.c[2] + sm.d[2] * f + (Math.random() - 0.5) * 0.05;
+          own[i * 3] = own[i * 3 + 1] = own[i * 3 + 2] = 0;
+          kind[i] = 0;
+          age[i] = Math.random() * dt;
         }
-        age[i] = Math.random() * dt;
+      }
+      // smoke machine: a dense billowing cloud
+      if (sm.on && sm.rate > 0) {
+        const jet = useLab.getState().params.smokeJet;
+        state.cloudCarry += (count / 34) * (0.25 + sm.rate) * dt;
+        for (; state.cloudCarry >= 1; state.cloudCarry--) {
+          const i = take();
+          pos[i * 3] = sm.c[0] + sm.d[0] * 0.08 + (Math.random() - 0.5) * 0.04;
+          pos[i * 3 + 1] = sm.c[1] + (Math.random() - 0.5) * 0.04;
+          pos[i * 3 + 2] = sm.c[2] + sm.d[2] * 0.08 + (Math.random() - 0.5) * 0.04;
+          // out of the nozzle at speed, with a wide random spread that makes it billow
+          const push = 1.5 + jet * 4 + Math.random() * 1.5;
+          let rx = Math.random() * 2 - 1;
+          let ry = Math.random() * 2 - 1;
+          let rz = Math.random() * 2 - 1;
+          const rl = Math.hypot(rx, ry, rz) || 1;
+          rx /= rl;
+          ry /= rl;
+          rz /= rl;
+          const spread = 0.6 + Math.random() * 1.4;
+          own[i * 3] = sm.d[0] * push + rx * spread;
+          own[i * 3 + 1] = sm.d[1] * push + Math.abs(ry) * spread * 0.6;
+          own[i * 3 + 2] = sm.d[2] * push + rz * spread;
+          kind[i] = 1;
+          age[i] = Math.random() * dt;
+        }
       }
     }
 
-    // advect through the solver's field
+    // advect: solver wind + the puff's own decaying momentum + turbulent mixing
+    const decay = Math.exp(-1.3 * dt);
     for (let i = 0; i < count; i++) {
-      if (age[i] > 6) continue;
-      const x = pos[i * 3];
-      const y = pos[i * 3 + 1];
-      const z = pos[i * 3 + 2];
+      const cloud = kind[i] > 0.5;
+      if (age[i] > (cloud ? 12 : 6)) continue;
+      const o = i * 3;
+      const x = pos[o];
+      const y = pos[o + 1];
+      const z = pos[o + 2];
       sampleVel(x, y, z, tmp.v);
-      // turbulent diffusion grows with age (filament, then plume)
-      const k = Math.min(0.9, 0.06 + age[i] * 0.3) * Math.sqrt(dt);
-      let nx = x + tmp.v[0] * dt + (Math.random() - 0.5) * k;
-      let ny = y + tmp.v[1] * dt + (Math.random() - 0.5) * k * 0.8;
-      let nz = z + tmp.v[2] * dt + (Math.random() - 0.5) * k;
-      if (ny < 0.03) ny = 0.03;
+      own[o] *= decay;
+      own[o + 1] *= decay;
+      own[o + 2] *= decay;
+      const k = (cloud ? Math.min(1.6, 0.25 + age[i] * 0.22) : Math.min(0.9, 0.06 + age[i] * 0.3)) * Math.sqrt(dt);
+      // a cloud slowly lifts as it spreads
+      const lift = cloud ? 0.06 : 0;
+      let nx = x + (tmp.v[0] + own[o]) * dt + (Math.random() - 0.5) * k;
+      let ny = y + (tmp.v[1] + own[o + 1] + lift) * dt + (Math.random() - 0.5) * k * 0.8;
+      let nz = z + (tmp.v[2] + own[o + 2]) * dt + (Math.random() - 0.5) * k;
+      if (ny < 0.03) {
+        ny = 0.03;
+        own[o + 1] = Math.abs(own[o + 1]) * 0.3;
+      }
       if (solidExact(nx, ny, nz)) {
         // hit a body: slide along its surface, keeping the largest part of the step that
         // stays in the air; failing that, lift off the surface a little
+        own[o] *= 0.4;
+        own[o + 1] *= 0.4;
+        own[o + 2] *= 0.4;
         if (!solidExact(nx, ny, z)) nz = z;
         else if (!solidExact(nx, y, nz)) ny = y;
         else if (!solidExact(x, ny, nz)) nx = x;
@@ -309,20 +381,18 @@ export function Smoke({ count }: { count: number }) {
           nz = z;
         } else age[i] = 99;
       }
-      pos[i * 3] = nx;
-      pos[i * 3 + 1] = ny;
-      pos[i * 3 + 2] = nz;
+      pos[o] = nx;
+      pos[o + 1] = ny;
+      pos[o + 2] = nz;
       age[i] += dt;
       if (nx < DOMAIN.min[0] || nx > DOMAIN.max[0] || nz < DOMAIN.min[2] || nz > DOMAIN.max[2] || ny > DOMAIN.max[1]) age[i] = 99;
     }
     geometry.attributes.position.needsUpdate = true;
     geometry.attributes.aAge.needsUpdate = true;
+    geometry.attributes.aKind.needsUpdate = true;
   });
 
-  // on the light studio backdrop the smoke needs more body and a cooler shade to read
   useEffect(() => {
-    material.uniforms.uLo.value.setRGB(0.56, 0.6, 0.67);
-    material.uniforms.uHi.value.setRGB(0.98, 0.98, 0.97);
     material.uniforms.uOpacity.value = studio ? 0.34 : 0.3;
   }, [material, studio]);
 

@@ -23,7 +23,7 @@ export const field = {
   linesVersion: 0,
   /** fan state as rendered this frame (world) */
   /** extra momentum discs published by source components (blower, smoke machine), world */
-  discs: {} as Record<string, { c: Vec3; d: Vec3; R: number; U: number; on: boolean }>,
+  discs: {} as Record<string, { c: Vec3; d: Vec3; R: number; U: number; on: boolean; depth?: number; gain?: number; ducted?: boolean }>,
   /** smoke machine nozzle, world: emits puffs when on */
   smoker: { c: [0, 0.6, 0] as Vec3, d: [1, 0, 0] as Vec3, rate: 0, on: false },
   /** exhaust (suction) fan disc, world */

@@ -206,7 +206,7 @@ function SourceInspector({ k }: { k: Selectable }) {
       return <FanInspector />;
     case "blower":
       return (
-        <Group title="Motor" aside={<span className="mono">{(p.blowerPower * 10).toFixed(1)} m/s</span>}>
+        <Group title="Motor" aside={<span className="mono">{(p.blowerPower * 11).toFixed(1)} m/s</span>}>
           <Slider label="Power" value={Math.round(p.blowerPower * 100)} min={0} max={100} unit="%" onChange={(v) => setParams({ blowerPower: v / 100 })} />
           <Slider label="Tilt" value={p.blowerTilt} min={-15} max={30} unit="°" onChange={(v) => setParams({ blowerTilt: v })} />
           <Rotation k="blower" />

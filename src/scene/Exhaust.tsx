@@ -46,7 +46,7 @@ export function Exhaust() {
       field.exhaust.d = [tmp.d.x, tmp.d.y, tmp.d.z];
     }
     field.exhaust.on = ex.enabled;
-    field.exhaust.U = (omega.current / 26) * FAN_MAX_SPEED;
+    field.exhaust.U = (omega.current / 26) * FAN_MAX_SPEED * 1.25;
   });
 
   if (!o.enabled) return null;

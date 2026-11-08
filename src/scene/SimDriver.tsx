@@ -5,10 +5,32 @@ import type { Quality } from "@/sim/config";
 import { EXHAUST_RADIUS, FAN_RADIUS } from "@/sim/config";
 import { field, uploadField } from "@/sim/field";
 import type { FromWorker, LineSpec, ToWorker } from "@/sim/protocol";
+import type { FanInput } from "@/sim/solver";
 import type { PlacedObject, ObjKind } from "@/sim/obstacles";
 import { useLab } from "@/lib/store";
 import { setCollisionObjects } from "@/sim/collide";
 import { sharedUniforms } from "./heatMaterial";
+
+/**
+ * The extractor as two momentum discs: its own ducted outflow, plus a wider intake zone
+ * upstream that draws the air towards it — that is what makes it pull air off the car.
+ */
+function exhaustDiscs(): FanInput[] {
+  const { c, d, U } = field.exhaust;
+  return [
+    { c, d, R: EXHAUST_RADIUS, U, spin: 0, depth: 1.2, gain: 2.5, ducted: true },
+    {
+      c: [c[0] - d[0] * 1.5, c[1] - d[1] * 1.5, c[2] - d[2] * 1.5],
+      d,
+      R: EXHAUST_RADIUS * 1.45,
+      U: U * 0.6,
+      spin: 0,
+      depth: 1.0,
+      gain: 1.6,
+      ducted: true,
+    },
+  ];
+}
 
 function placedObjects(): PlacedObject[] {
   const { objects } = useLab.getState();
@@ -113,12 +135,10 @@ export function SimDriver({ quality, onReady }: { quality: Quality; onReady: (l:
       dt,
       fan: { c: field.fan.c, d: field.fan.d, R: FAN_RADIUS, U: field.fan.U, spin: field.fan.spin },
       extra: [
-        ...(field.exhaust.on && field.exhaust.U > 0.05
-          ? [{ c: field.exhaust.c, d: field.exhaust.d, R: EXHAUST_RADIUS, U: field.exhaust.U, spin: 0 }]
-          : []),
+        ...(field.exhaust.on && field.exhaust.U > 0.05 ? exhaustDiscs() : []),
         ...Object.values(field.discs)
           .filter((q) => q.on && q.U > 0.05)
-          .map((q) => ({ c: q.c, d: q.d, R: q.R, U: q.U, spin: 0 })),
+          .map((q) => ({ c: q.c, d: q.d, R: q.R, U: q.U, spin: 0, depth: q.depth, gain: q.gain, ducted: q.ducted })),
       ],
       streamlines: s.layers.streamlines,
     };

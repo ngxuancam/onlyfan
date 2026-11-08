@@ -13,7 +13,7 @@ import { SelectionRing, useDrag } from "./Obstacles";
 
 export const BLOWER_RADIUS = 0.95;
 const BLOWER_AXIS = 1.2;
-const BLOWER_MAX = 10;
+const BLOWER_MAX = 11;
 
 /**
  * A motor-driven drum blower on a wheeled cart: a much wider, stronger jet than the
@@ -58,7 +58,8 @@ export function Blower() {
     const st = useLab.getState();
     const target = st.objects.blower.enabled ? st.params.blowerPower : 0;
     omega.current += (target * 22 - omega.current) * Math.min(1, delta * 1.0);
-    const disc = (field.discs.blower ??= { c: [0, 1, 0], d: [1, 0, 0], R: BLOWER_RADIUS, U: 0, on: false });
+    // a ducted drum fan: drives a long, uniform plug of air, much harder than the stand fan
+    const disc = (field.discs.blower ??= { c: [0, 1, 0], d: [1, 0, 0], R: BLOWER_RADIUS, U: 0, on: false, depth: 1.5, gain: 2.5, ducted: true });
     disc.on = st.objects.blower.enabled;
     disc.U = (omega.current / 22) * BLOWER_MAX;
     if (rotor.current) {

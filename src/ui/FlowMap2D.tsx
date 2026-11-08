@@ -129,7 +129,9 @@ export function FlowMap2D() {
     const hitTest = (x: number, z: number): Selectable | null => {
       const s = useLab.getState();
       const keys: ObjKey[] = ["rig", "car", "tree", "shrub", "house"];
-      if (Math.hypot(s.fan.x - x, s.fan.z - z) < 0.8) return "fan";
+      if (s.fan.enabled && Math.hypot(s.fan.x - x, s.fan.z - z) < 0.8) return "fan";
+      if (s.objects.blower.enabled && Math.hypot(s.objects.blower.x - x, s.objects.blower.z - z) < 1.1) return "blower";
+      if (s.objects.smoker.enabled && Math.hypot(s.objects.smoker.x - x, s.objects.smoker.z - z) < 0.5) return "smoker";
       if (s.objects.exhaust.enabled && Math.hypot(s.objects.exhaust.x - x, s.objects.exhaust.z - z) < 1.0) return "exhaust";
       for (const k of keys) {
         const o = s.objects[k];
@@ -320,30 +322,66 @@ export function FlowMap2D() {
         }
       }
 
-      // fan
-      const f = field.fan;
-      const dx = f.d[0];
-      const dz = f.d[2];
-      const dl = Math.hypot(dx, dz) || 1;
-      const ux = dx / dl;
-      const uz = dz / dl;
-      const cx = sx(f.c[0]);
-      const cz = sz(f.c[2]);
-      ctx.strokeStyle = "#ff6a1a";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(cx - uz * 0.75 * scale, cz + ux * 0.75 * scale);
-      ctx.lineTo(cx + uz * 0.75 * scale, cz - ux * 0.75 * scale);
-      ctx.stroke();
-      ctx.fillStyle = "#1a1c22";
-      ctx.strokeStyle = "rgba(255,255,255,0.35)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(sx(s.fan.x), sz(s.fan.z), 0.47 * scale, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      arrow(ctx, cx, cz, cx + ux * 1.4 * scale, cz + uz * 1.4 * scale, "#ff6a1a", 2);
-      label(ctx, `FAN ${Math.round(f.headYaw)}°`, cx - uz * 1.1 * scale - 30, cz + ux * 1.1 * scale + 4, "#ff9a5a");
+      // stand fan (only when it is in the scene)
+      if (s.fan.enabled) {
+        const f = field.fan;
+        const dx = f.d[0];
+        const dz = f.d[2];
+        const dl = Math.hypot(dx, dz) || 1;
+        const ux = dx / dl;
+        const uz = dz / dl;
+        const cx = sx(f.c[0]);
+        const cz = sz(f.c[2]);
+        ctx.strokeStyle = "#ff6a1a";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(cx - uz * 0.75 * scale, cz + ux * 0.75 * scale);
+        ctx.lineTo(cx + uz * 0.75 * scale, cz - ux * 0.75 * scale);
+        ctx.stroke();
+        ctx.fillStyle = "#1a1c22";
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(sx(s.fan.x), sz(s.fan.z), 0.47 * scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        arrow(ctx, cx, cz, cx + ux * 1.4 * scale, cz + uz * 1.4 * scale, "#ff6a1a", 2);
+        label(ctx, `FAN ${Math.round(f.headYaw)}°`, cx - uz * 1.1 * scale - 30, cz + ux * 1.1 * scale + 4, "#ff9a5a");
+      }
+
+      // industrial blower: drum seen from above + outflow arrow
+      const bl = s.objects.blower;
+      const bd = field.discs.blower;
+      if (bl.enabled && bd) {
+        const l = Math.hypot(bd.d[0], bd.d[2]) || 1;
+        const ux = bd.d[0] / l;
+        const uz = bd.d[2] / l;
+        const X = sx(bl.x);
+        const Y = sz(bl.z);
+        ctx.save();
+        ctx.translate(X, Y);
+        ctx.rotate(Math.atan2(uz, ux));
+        ctx.fillStyle = "#1a1c22";
+        ctx.strokeStyle = s.selected === "blower" ? "#ff7a1a" : "rgba(255,255,255,0.4)";
+        ctx.fillRect(-0.3 * scale, -1.05 * scale, 0.6 * scale, 2.1 * scale);
+        ctx.strokeRect(-0.3 * scale, -1.05 * scale, 0.6 * scale, 2.1 * scale);
+        ctx.restore();
+        const al = 1.6 * scale * Math.max(0.2, bd.U / 11);
+        arrow(ctx, X, Y, X + ux * al, Y + uz * al, "#ff6a1a", 2.5);
+        label(ctx, `BLOWER ${bd.U.toFixed(1)} m/s`, X - 40, Y - 1.2 * scale, "#ff9a5a");
+      }
+
+      // smoke machine nozzle
+      const sm = s.objects.smoker;
+      if (sm.enabled) {
+        const X = sx(field.smoker.c[0]);
+        const Y = sz(field.smoker.c[2]);
+        ctx.fillStyle = s.selected === "smoker" ? "#ff7a1a" : "#c9d2de";
+        ctx.beginPath();
+        ctx.arc(X, Y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        label(ctx, "SMOKE", X - 18, Y - 9, "#c9d2de");
+      }
 
       // exhaust fan: housing seen from above, arrow = outflow
       const ex = s.objects.exhaust;

@@ -99,7 +99,7 @@ export default function Scene({ quality }: { quality: Quality }) {
       <SmokeMachine />
       <Leaves />
       {line && <Streamlines spec={line} />}
-      <Smoke count={quality === "high" ? 16000 : 6000} />
+      <Smoke count={quality === "high" ? 20000 : 8000} />
 
       <OrbitControls
         makeDefault

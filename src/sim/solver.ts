@@ -27,6 +27,12 @@ export interface FanInput {
   U: number;
   /** blade rotation angle, rad — spins the swirl seeds */
   spin: number;
+  /** thickness of the forced slab along the axis, metres (default 2.2 cells) */
+  depth?: number;
+  /** how hard the slab is driven towards the target velocity (default 1) */
+  gain?: number;
+  /** ducted fans push a uniform plug instead of an annular jet */
+  ducted?: boolean;
 }
 
 const FLUID = 0;
@@ -225,15 +231,16 @@ export class Fluid {
     const [cx, cy, cz] = fan.c;
     const [dx, dy, dz] = fan.d;
     const R = fan.R;
-    const ext = R + 2 * h;
+    const depth = fan.depth ?? 2.2 * h;
+    const ext = Math.max(R, depth) + 2 * h;
     const i0 = Math.max(1, Math.floor((cx - ext - min[0]) / h));
     const i1 = Math.min(this.nx, Math.ceil((cx + ext - min[0]) / h) + 1);
     const j0 = Math.max(1, Math.floor((cy - ext - min[1]) / h));
     const j1 = Math.min(this.ny, Math.ceil((cy + ext - min[1]) / h) + 1);
     const k0 = Math.max(1, Math.floor((cz - ext - min[2]) / h));
     const k1 = Math.min(this.nz, Math.ceil((cz + ext - min[2]) / h) + 1);
-    const depth = 2.2 * h;
-    const blend = Math.min(1, dt * 14);
+    const blend = Math.min(1, dt * 14 * (fan.gain ?? 1));
+    const ducted = !!fan.ducted;
     for (let k = k0; k <= k1; k++)
       for (let j = j0; j <= j1; j++)
         for (let i = i0; i <= i1; i++) {
@@ -251,7 +258,7 @@ export class Fluid {
           if (r > R) continue;
           const q = r / R;
           // annular jet: weak behind the hub, strongest at ~70 % radius
-          const prof = 0.35 + 0.65 * smooth(0.05, 0.45, q) - 0.4 * smooth(0.8, 1.0, q);
+          const prof = ducted ? 1 - 0.25 * smooth(0.85, 1.0, q) : 0.35 + 0.65 * smooth(0.05, 0.45, q) - 0.4 * smooth(0.8, 1.0, q);
           const s = fan.U * prof;
           // blade swirl: tangential component d × r̂
           const sw = r > 1e-4 ? (0.18 * s) / r : 0;

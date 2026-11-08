@@ -39,33 +39,51 @@ export interface PlacedObject extends Placement {
 
 /* ---------------------------------------------------------------- car */
 
-/** Crossover silhouette, front at -X. Lower body (full width). */
-export const CAR_BODY: [number, number][] = [
-  [1.92, 0.3],
-  [1.99, 0.72],
-  [1.9, 1.0],
-  [-0.95, 1.02],
-  [-1.82, 0.86],
-  [-1.99, 0.62],
-  [-1.93, 0.3],
+/**
+ * An open-wheel race car (F1-like), front at -X: 5.05 m long, 1.95 m wide, 0.98 m high.
+ * Side profile of the monocoque + engine cover, extruded to the chassis width.
+ */
+export const F1_CHASSIS: [number, number][] = [
+  [-2.75, 0.14],
+  [-2.75, 0.21],
+  [-2.2, 0.33],
+  [-1.4, 0.47],
+  [-0.8, 0.59],
+  [-0.45, 0.66],
+  [-0.2, 0.78],
+  [0.0, 0.97],
+  [0.42, 0.97],
+  [0.72, 0.8],
+  [1.4, 0.6],
+  [2.0, 0.48],
+  [2.3, 0.42],
+  [2.3, 0.12],
+  [-1.0, 0.08],
+  [-2.2, 0.12],
 ];
-/** Greenhouse (narrower): rear hatch, roof, windscreen. */
-export const CAR_CABIN: [number, number][] = [
-  [1.8, 0.98],
-  [1.5, 1.42],
-  [0.25, 1.53],
-  [-0.4, 1.47],
-  [-1.05, 0.98],
+
+export const F1_WHEELS: { x: number; z: number; r: number; w: number }[] = [
+  { x: -1.75, z: -0.8, r: 0.33, w: 0.36 },
+  { x: -1.75, z: 0.8, r: 0.33, w: 0.36 },
+  { x: 1.62, z: -0.78, r: 0.35, w: 0.44 },
+  { x: 1.62, z: 0.78, r: 0.35, w: 0.44 },
 ];
 
 function car(): Prim[] {
-  const wheels: Prim[] = [];
-  for (const x of [-1.25, 1.22])
-    for (const z of [-0.72, 0.72]) wheels.push({ t: "cylZ", c: [x, 0.36, z], r: 0.36, len: 0.3, part: "wheel" });
   return [
-    { t: "prism", poly: CAR_BODY, z0: -0.85, z1: 0.85, part: "body" },
-    { t: "prism", poly: CAR_CABIN, z0: -0.7, z1: 0.7, part: "glass" },
-    ...wheels,
+    { t: "prism", poly: F1_CHASSIS, z0: -0.42, z1: 0.42, part: "body" },
+    // sidepods
+    { t: "box", c: [0.45, 0.36, -0.6], s: [1.9, 0.48, 0.38], part: "body" },
+    { t: "box", c: [0.45, 0.36, 0.6], s: [1.9, 0.48, 0.38], part: "body" },
+    // floor / underbody
+    { t: "box", c: [0.5, 0.06, 0], s: [3.3, 0.04, 1.5], part: "body" },
+    // front wing
+    { t: "box", c: [-2.55, 0.12, 0], s: [0.55, 0.05, 1.95], part: "body" },
+    // rear wing: main plane + endplates
+    { t: "box", c: [2.32, 0.86, 0], s: [0.42, 0.05, 1.0], part: "body" },
+    { t: "box", c: [2.32, 0.66, -0.5], s: [0.62, 0.5, 0.03], part: "body" },
+    { t: "box", c: [2.32, 0.66, 0.5], s: [0.62, 0.5, 0.03], part: "body" },
+    ...F1_WHEELS.map((w): Prim => ({ t: "cylZ", c: [w.x, w.r, w.z], r: w.r, len: w.w, part: "wheel" })),
   ];
 }
 
@@ -162,8 +180,8 @@ function shrub(): Prim[] {
 export const SHAPES: Record<ObjKind, Prim[]> = { car: car(), house: house(), tree: tree(), shrub: shrub() };
 
 /** Horizontal radius that bounds each object (for voxelisation loops and drag picking). */
-export const BOUND_RADIUS: Record<ObjKind, number> = { car: 2.3, house: 3.6, tree: 2.0, shrub: 2.4 };
-export const BOUND_HEIGHT: Record<ObjKind, number> = { car: 1.7, house: 3.7, tree: 4.8, shrub: 1.4 };
+export const BOUND_RADIUS: Record<ObjKind, number> = { car: 3.1, house: 3.6, tree: 2.0, shrub: 2.4 };
+export const BOUND_HEIGHT: Record<ObjKind, number> = { car: 1.1, house: 3.7, tree: 4.8, shrub: 1.4 };
 
 /* ------------------------------------------------------- point tests */
 

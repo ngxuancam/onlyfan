@@ -116,6 +116,8 @@ export function Fan() {
     const s = sim.current;
     const f = useLab.getState().fan;
     const spd = f.enabled ? f.speed : 0;
+    // switched off (e.g. a scenario without the stand fan): stop at once, no coasting jet
+    if (!f.enabled) s.omega = 0;
     const powered = spd > 0.001;
     // motor inertia
     s.omega += (spd * MAX_OMEGA - s.omega) * Math.min(1, dt * 1.4);

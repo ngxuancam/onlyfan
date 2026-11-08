@@ -147,7 +147,7 @@ export const PRESETS: Record<
     hint: "Everything at once: the head sweeps across car, house and tree, and the tree sheds leaves into the wind.",
     fan: { ...DEFAULT_FAN },
     objects: {
-      car: on(0.8, -2.4),
+      car: on(1.0, -2.6),
       house: on(7.5, 1.6),
       tree: on(3.4, 3.4),
       shrub: off(3, -3.8),
@@ -160,17 +160,17 @@ export const PRESETS: Record<
   tunnel: {
     label: "Wind tunnel",
     hint: "Blower in front, exhaust fan behind and a smoke machine at the nose: air is pushed onto the car and pulled off the tail, as if it were driving.",
-    fan: { enabled: false, speed: 1, oscillate: false, yaw: 0, tilt: -2, height: 1.25, x: -3.4, z: 2.5 },
-    params: { blowerPower: 0.9, blowerTilt: 0, smokeHeight: 0.75, smokeJet: 0.2 },
+    fan: { enabled: false, speed: 1, oscillate: false, yaw: 0, tilt: -2, height: 1.25, x: -3.4, z: 3 },
+    params: { blowerPower: 0.9, blowerTilt: 0, smokeHeight: 0.45, smokeJet: 0.25, smokeOutput: 0.8 },
     objects: {
-      car: on(0.6, 0),
+      car: on(1.2, 0),
       house: off(8, 2),
       tree: off(4, 3.5),
       shrub: off(3, -3.6),
       rig: off(4.6, 0, 0),
-      exhaust: on(4.4, 0),
-      blower: on(-4.2, 0),
-      smoker: on(-2.2, 0),
+      exhaust: on(5.6, 0),
+      blower: on(-4.4, 0),
+      smoker: on(-2.6, 0),
     },
   },
   ventilation: {
